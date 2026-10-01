@@ -1,0 +1,22 @@
+{
+  "name": "proyecto-jarvis",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:backend": "pnpm --filter backend build",
+    "build:frontend": "pnpm --filter frontend build",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter backend sequelize:migrate",
+    "db:seed": "pnpm --filter backend sequelize:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.7"
+  }
+}

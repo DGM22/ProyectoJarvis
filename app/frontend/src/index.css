@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@theme {
+  /* Superficies · navy / slate */
+  --color-bg: #07090f;
+  --color-surface: #0b1018;
+  --color-raised: #0f1523;
+  --color-overlay: #161e2e;
+  --color-border: #1c2534;
+
+  /* Texto */
+  --color-text-hi: #eef3fa;
+  --color-text-mid: #a8b4c6;
+  --color-text-low: #6e7c93;
+
+  /* Semánticos */
+  --color-ok: #5fd3a6;
+  --color-danger: #e4606d;
+  --color-danger-soft: #f98a94;
+
+  /* Acento · sólo para “IA activa” */
+  --color-accent-300: #7debfa;
+  --color-accent-400: #3edcf2;
+  --color-accent-500: #17c3e0;
+  --color-accent-600: #0e93ac;
+  --color-accent-wash: color-mix(in srgb, #17c3e0 16%, transparent);
+
+  /* Tipografía */
+  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --text-display: 34px;
+  --text-display--font-weight: 600;
+  --text-title: 20px;
+  --text-title--font-weight: 600;
+  --text-body: 15px;
+  --text-body--font-weight: 400;
+  --text-mono: 11px;
+  --text-mono--letter-spacing: 0.14em;
+
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-card: 18px;
+
+  /* Luz · sin sombras duras */
+  --background-image-glow-top: radial-gradient(
+    120% 100% at 50% 0%,
+    rgba(23, 195, 224, 0.18),
+    transparent 70%
+  );
+  --shadow-glow-inset: inset 0 0 48px rgb(23 195 224 / 0.12);
+  --shadow-glow: 0 0 40px rgb(23 195 224 / 0.28);
+  --shadow-glow-lg: 0 0 90px rgb(23 195 224 / 0.35);
+
+  --animate-ring: ring 2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  --animate-breathe: breathe 3.2s ease-in-out infinite;
+  --animate-bar: bar 0.9s ease-in-out infinite;
+}
+
+@keyframes ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body {
+    @apply bg-bg text-text-hi text-body font-sans antialiased;
+    min-width: 320px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

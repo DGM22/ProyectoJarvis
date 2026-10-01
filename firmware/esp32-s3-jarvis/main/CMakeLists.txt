@@ -1,0 +1,26 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "board.c"
+        "button.c"
+        "wifi_sta.c"
+        "nvs_config.c"
+        "i2s_audio.c"
+        "jarvis_ws.c"
+        "wake_gate.c"
+        "display_hal.c"
+        "jarvis_sm.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        wpa_supplicant
+        esp_event
+        esp_netif
+        esp_http_client
+        esp_websocket_client
+        driver
+        freertos
+        json
+        mbedtls
+)

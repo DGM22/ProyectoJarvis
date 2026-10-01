@@ -1,0 +1,182 @@
+[
+  {
+    "id": "gt-01",
+    "transcript": "En la empresa el proveedor principal de contabilidad es Contpaqi. Lo usamos desde hace tres años.",
+    "expected_facts": [
+      {
+        "subject_slug": "proveedor_principal",
+        "canonical_contains": ["Contpaqi"],
+        "fact_type": "hecho"
+      }
+    ]
+  },
+  {
+    "id": "gt-02",
+    "transcript": "Recuerda que el tono de marca debe ser formal pero cercano, nunca informal ni con jerga.",
+    "expected_facts": [
+      {
+        "subject_slug": "tono_marca",
+        "canonical_contains": ["formal"],
+        "fact_type": "preferencia"
+      }
+    ]
+  },
+  {
+    "id": "gt-03",
+    "transcript": "Decidimos que las juntas internas serán los martes a las 10 de la mañana.",
+    "expected_facts": [
+      {
+        "subject_slug": "juntas_internas",
+        "canonical_contains": ["martes"],
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "id": "gt-04",
+    "transcript": "El procedimiento para onboarding de clientes es: primero kickoff, luego discovery, después propuesta.",
+    "expected_facts": [
+      {
+        "subject_slug": "onboarding_clientes",
+        "canonical_contains": ["kickoff"],
+        "fact_type": "procedimiento"
+      }
+    ]
+  },
+  {
+    "id": "gt-05",
+    "transcript": "Nuestra IA destaca por automatizar flujos de n8n y voz en español mexicano.",
+    "expected_facts": [
+      {
+        "subject_slug": "diferenciador_ia",
+        "canonical_contains": ["n8n"],
+        "fact_type": "regla"
+      }
+    ]
+  },
+  {
+    "id": "gt-06",
+    "transcript": "Hola, gracias, adiós.",
+    "expected_facts": []
+  },
+  {
+    "id": "gt-07",
+    "transcript": "El cliente principal este trimestre es Grupo Industrial del Norte.",
+    "expected_facts": [
+      {
+        "subject_slug": "cliente_principal",
+        "canonical_contains": ["Grupo Industrial"],
+        "fact_type": "hecho"
+      }
+    ]
+  },
+  {
+    "id": "gt-08",
+    "transcript": "Preferimos responder siempre en español, aunque el usuario hable en inglés ocasionalmente.",
+    "expected_facts": [
+      {
+        "subject_slug": "idioma_respuesta",
+        "canonical_contains": ["español"],
+        "fact_type": "preferencia"
+      }
+    ]
+  },
+  {
+    "id": "gt-09",
+    "transcript": "Cambiamos el proveedor principal: ahora es Aspel, ya no Contpaqi.",
+    "expected_facts": [
+      {
+        "subject_slug": "proveedor_principal",
+        "canonical_contains": ["Aspel"],
+        "fact_type": "hecho"
+      }
+    ]
+  },
+  {
+    "id": "gt-10",
+    "transcript": "La regla de oro es nunca inventar datos de facturación; siempre confirmar con el usuario.",
+    "expected_facts": [
+      {
+        "subject_slug": "regla_facturacion",
+        "canonical_contains": ["facturación", "facturacion"],
+        "fact_type": "regla"
+      }
+    ]
+  },
+  {
+    "id": "gt-11",
+    "transcript": "Ok sí, perfecto, nos vemos mañana.",
+    "expected_facts": []
+  },
+  {
+    "id": "gt-12",
+    "transcript": "El horario de soporte es de nueve a seis, hora Ciudad de México.",
+    "expected_facts": [
+      {
+        "subject_slug": "horario_soporte",
+        "canonical_contains": ["nueve", "seis", "México", "Mexico"],
+        "fact_type": "hecho"
+      }
+    ]
+  },
+  {
+    "id": "gt-13",
+    "transcript": "Decidimos migrar la base de datos a Postgres con pgvector para la knowledge base.",
+    "expected_facts": [
+      {
+        "subject_slug": "stack_base_datos",
+        "canonical_contains": ["pgvector", "Postgres"],
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "id": "gt-14",
+    "transcript": "Para cerrar un deal el procedimiento es demo, POC de dos semanas y luego contrato.",
+    "expected_facts": [
+      {
+        "subject_slug": "cierre_deal",
+        "canonical_contains": ["POC", "demo"],
+        "fact_type": "procedimiento"
+      }
+    ]
+  },
+  {
+    "id": "gt-15",
+    "transcript": "Me gusta que Jarvis sea breve en voz y detalle en texto cuando se pide.",
+    "expected_facts": [
+      {
+        "subject_slug": "estilo_jarvis",
+        "canonical_contains": ["breve"],
+        "fact_type": "preferencia"
+      }
+    ]
+  },
+  {
+    "id": "gt-16",
+    "transcript": "El RFC de la empresa es XAXX010101000 solo para pruebas, no es el real.",
+    "expected_facts": [
+      {
+        "subject_slug": "rfc_pruebas",
+        "canonical_contains": ["XAXX010101000"],
+        "fact_type": "hecho"
+      }
+    ]
+  },
+  {
+    "id": "gt-17",
+    "transcript": "Nunca compartas tokens de API en voz alta; pídele al usuario que los pegue por texto.",
+    "expected_facts": [
+      {
+        "subject_slug": "seguridad_tokens",
+        "canonical_contains": ["tokens", "API"],
+        "fact_type": "regla"
+      }
+    ]
+  },
+  {
+    "id": "gt-18",
+    "transcript": "Hoy hablamos del clima y del tráfico, nada de trabajo.",
+    "expected_facts": []
+  }
+]

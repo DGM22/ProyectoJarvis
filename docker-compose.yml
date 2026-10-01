@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: jarvis-postgres
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jarvis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-jarvis}
+    volumes:
+      - jarvis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-jarvis} -d ${POSTGRES_DB:-jarvis}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  wakeword:
+    build: ./app/wakeword
+    container_name: jarvis-wakeword
+    restart: unless-stopped
+    ports:
+      # Published so NestJS running on the host can reach ws://localhost:8765
+      - '${WAKEWORD_PORT:-8765}:8765'
+    environment:
+      WAKEWORD_THRESHOLD: ${WAKEWORD_THRESHOLD:-0.5}
+      WAKEWORD_COOLDOWN_MS: ${WAKEWORD_COOLDOWN_MS:-2000}
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8765/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  jarvis_pgdata:

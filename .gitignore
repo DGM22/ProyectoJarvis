@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage / test
+coverage/
+.nyc_output/
+
+# Docker volumes (if bind-mounted locally)
+pgdata/
+
+# Generated transcript files (backend)
+app/backend/storage/
+
+# Nest / Vite caches
+.nest/
+.vite/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# ESP-IDF firmware (sdkconfig/sdkconfig.local llevan WiFi password y token)
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+firmware/**/sdkconfig.local
+firmware/**/managed_components/
+
+# Cámara Freenove (WiFi + token)
+esp32-camera/src/secrets.h
+esp32-camera/.pio/
+firmware/**/.pio/
+firmware/**/.vscode/

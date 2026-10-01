@@ -1,0 +1,48 @@
+menu "Jarvis Device"
+
+    config JARVIS_WIFI_SSID
+        string "WiFi SSID (2.4 GHz)"
+        default "YOUR_WIFI"
+
+    config JARVIS_WIFI_PASS
+        string "WiFi password (vacío = red abierta)"
+        default "YOUR_PASSWORD"
+
+    config JARVIS_WIFI_EAP_USERNAME
+        string "WPA2-Enterprise username (vacío = WPA2-PSK)"
+        default ""
+        help
+            Con valor, conecta por WPA2-Enterprise (PEAP/TTLS) usando este
+            usuario y "WiFi password". Vacío para redes normales con contraseña.
+
+    config JARVIS_WIFI_MAC
+        string "MAC personalizada de WiFi (vacío = la de fábrica)"
+        default ""
+        help
+            Formato AA:BB:CC:DD:EE:FF. El primer byte debe ser par (unicast).
+            Recomendado administrada localmente (segundo dígito 2, 6, A o E),
+            p. ej. 02:1A:2B:3C:4D:5E. Si es inválida se usa la MAC de fábrica.
+
+    config JARVIS_BACKEND_URL
+        string "Backend URL"
+        default "wss://jarvis.gms-app.com"
+        help
+            Base del backend NestJS, sin ruta. Ejemplos:
+              wss://jarvis.gms-app.com      (Cloudflare Tunnel, TLS en 443)
+              ws://abc123.ngrok-free.app    (ngrok con --scheme http,https)
+              wss://mi-dominio.com          (TLS en 443)
+              ws://192.168.1.10:3000        (misma red LAN)
+            También acepta https:// / http:// y los convierte.
+
+    config JARVIS_DEVICE_TOKEN
+        string "Device token (Config → Dispositivos en la app)"
+        default "jdv_replace_me"
+
+    config JARVIS_WAKE_WORD
+        bool "Wake word \"Hey Jarvis\" además del botón BOOT"
+        default y
+        help
+            Requiere el servicio `wakeword` de docker-compose corriendo.
+            Desactívalo para modo timbre puro (solo botón).
+
+endmenu

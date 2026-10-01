@@ -1,0 +1,22 @@
+# Waveshare ESP32-S3-ePaper-1.54 (V1: 4 MB flash / V2: 8 MB). 4 MB funciona en ambas.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+# PSRAM no hace falta (buffers en RAM interna) y así sirve en V1 y V2.
+CONFIG_SPIRAM=n
+# TLS para wss://: bundle de CAs. Ojo: el borde de ngrok free corta el handshake del ESP32
+# (google/httpbin sí funcionan), por eso con ngrok usamos ws:// + --scheme http,https.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# App ~1 MB con TLS: partición de 1.5 MB
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# Streaming de audio (~32 KB/s de subida) por ngrok con RTT ~250 ms:
+# el buffer TCP por defecto (5.7 KB) no alcanza y el WS se cae.
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=32768
+CONFIG_LWIP_TCP_WND_DEFAULT=32768
+CONFIG_LWIP_TCP_RECVMBOX_SIZE=32
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=64
