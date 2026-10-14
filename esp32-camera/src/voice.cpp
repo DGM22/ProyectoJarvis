@@ -81,9 +81,9 @@ static constexpr uint32_t INTERCOM_ECHO_HOLD_MS = 250;
 static constexpr uint32_t INTERCOM_AMP_IDLE_OFF_MS = 350;
 /**
  * Volumen 0..256 (256 = sin cambio). La voz de OpenAI viene casi a escala
- * completa; arriba de ~160 el MAX98357A (9 dB de ganancia) satura y pita.
+ * completa; cerca de 256 el MAX98357A (9 dB de ganancia) satura y pita.
  */
-static constexpr int32_t VOLUME = 140;
+static constexpr int32_t VOLUME = 200;
 /** Rampa al arrancar a sonar (y tras cada hueco) para que no truene. */
 static constexpr uint32_t FADE_IN_SAMPLES = SAMPLE_RATE / 50;
 /** Rampa de salida cuando se acaba el audio: evita el chasquido del corte a 0. */
