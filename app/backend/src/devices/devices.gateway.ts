@@ -238,6 +238,9 @@ export class DevicesGateway
             this.send(client, { type: 'error', message });
             this.send(client, { type: 'display.set', state: 'error' });
           },
+          onControl: (message) => {
+            this.send(client, message);
+          },
         },
         {
           reason,

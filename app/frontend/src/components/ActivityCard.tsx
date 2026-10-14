@@ -1,20 +1,6 @@
-import {
-  Calendar,
-  CheckSquare,
-  Mail,
-  FolderOpen,
-  AlertCircle,
-  Zap,
-} from 'lucide-react';
+import { AlertCircle, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActivityEntry } from '@/hooks/useActivityLog';
-
-const SKILL_ICON: Record<string, typeof Calendar> = {
-  'google-calendar': Calendar,
-  'google-tasks': CheckSquare,
-  'google-gmail': Mail,
-  'google-drive': FolderOpen,
-};
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -33,7 +19,6 @@ interface ActivityCardProps {
 }
 
 export function ActivityCard({ entry }: ActivityCardProps) {
-  const Icon = SKILL_ICON[entry.skillName] ?? Zap;
   const isError = entry.status === 'error';
 
   return (
@@ -49,7 +34,7 @@ export function ActivityCard({ entry }: ActivityCardProps) {
           isError ? 'bg-danger/10 text-danger' : 'bg-accent-wash text-accent-400',
         )}
       >
-        {isError ? <AlertCircle size={16} /> : <Icon size={16} />}
+        {isError ? <AlertCircle size={16} /> : <Zap size={16} />}
       </div>
 
       <div className="min-w-0 flex-1">

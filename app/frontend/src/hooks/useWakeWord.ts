@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { API_BASE_URL } from '@/lib/api/http';
+import { requestMicrophone } from '@/lib/microphone';
 
 export type WakeWordStatus =
   | 'idle'
@@ -12,9 +14,6 @@ interface UseWakeWordOptions {
   paused: boolean;
   onWakeWord: () => void;
 }
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
 const WORKLET_URL = '/wake-word-processor.js';
 const RECONNECT_BASE_MS = 2000;
@@ -101,13 +100,7 @@ export function useWakeWord({
     };
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      stream = await requestMicrophone();
     } catch {
       if (!isStale()) {
         setStatus('permission-denied');

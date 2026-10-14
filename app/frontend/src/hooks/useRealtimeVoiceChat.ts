@@ -6,9 +6,8 @@ import type {
   VoiceCallMode,
   VoiceChatStatus,
 } from '../types/realtime';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import { API_BASE_URL } from '@/lib/api/http';
+import { requestMicrophone } from '@/lib/microphone';
 
 const ACTIVE_STATUSES: VoiceChatStatus[] = [
   'requesting_token',
@@ -101,6 +100,9 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
   const [status, setStatus] = useState<VoiceChatStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [muted, setMutedState] = useState(false);
+  const mutedRef = useRef(false);
+  mutedRef.current = muted;
+  const onHoldRef = useRef(false);
   const [turns, setTurns] = useState<SessionTurn[]>([]);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -130,8 +132,19 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
 
   const setMuted = useCallback(
     (nextMuted: boolean) => {
-      applyMuteToLocalTracks(nextMuted);
+      applyMuteToLocalTracks(nextMuted || onHoldRef.current);
       setMutedState(nextMuted);
+    },
+    [applyMuteToLocalTracks],
+  );
+
+  const setOnHold = useCallback(
+    (onHold: boolean) => {
+      onHoldRef.current = onHold;
+      applyMuteToLocalTracks(onHold || mutedRef.current);
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = onHold;
+      }
     },
     [applyMuteToLocalTracks],
   );
@@ -423,6 +436,7 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
 
         const remoteAudio = document.createElement('audio');
         remoteAudio.autoplay = true;
+        remoteAudio.muted = onHoldRef.current;
         remoteAudioRef.current = remoteAudio;
 
         peerConnection.ontrack = (event) => {
@@ -459,14 +473,9 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
           dataChannel.send(JSON.stringify({ type: 'response.create' }));
         });
 
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
+        const localStream = await requestMicrophone();
         localStreamRef.current = localStream;
+        applyMuteToLocalTracks(onHoldRef.current);
         localStream.getTracks().forEach((track) => {
           peerConnection.addTrack(track, localStream);
         });
@@ -520,7 +529,7 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
         setStatus('error');
       }
     },
-    [cleanup, handleDataChannelMessage],
+    [applyMuteToLocalTracks, cleanup, handleDataChannelMessage],
   );
 
   useEffect(() => {
@@ -551,6 +560,7 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
     isActive: ACTIVE_STATUSES.includes(status),
     muted,
     setMuted,
+    setOnHold,
     turns,
     sendText,
     latencyMs,

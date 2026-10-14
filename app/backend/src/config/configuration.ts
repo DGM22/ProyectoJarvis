@@ -43,10 +43,6 @@ export default () => ({
       process.env.KB_PENDING_REVIEW_TTL_DAYS ?? '30',
       10,
     ),
-    extractionMinChars: parseInt(
-      process.env.KB_EXTRACTION_MIN_CHARS ?? '100',
-      10,
-    ),
     reconciliationSimilarityThreshold: parseFloat(
       process.env.KB_RECONCILIATION_SIMILARITY_THRESHOLD ?? '0.9',
     ),
@@ -55,16 +51,6 @@ export default () => ({
       process.env.KB_RECENCY_HALF_LIFE_DAYS ?? '180',
       10,
     ),
-    extractionEnabled:
-      (process.env.KB_EXTRACTION_ENABLED ?? 'false').toLowerCase() === 'true',
-  },
-  google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-    redirectUri:
-      process.env.GOOGLE_REDIRECT_URI ??
-      'http://localhost:3000/google/auth/callback',
-    tokenEncryptionKey: process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ?? '',
   },
   database: {
     host: process.env.POSTGRES_HOST ?? 'localhost',
@@ -76,17 +62,6 @@ export default () => ({
   wakeword: {
     serviceUrl: process.env.WAKEWORD_SERVICE_URL ?? 'ws://localhost:8765',
     wsToken: process.env.WAKEWORD_WS_TOKEN ?? '',
-  },
-  transcription: {
-    model: process.env.TRANSCRIPTION_MODEL ?? 'gpt-4o-mini-transcribe',
-    chunkSeconds: parseInt(process.env.TRANSCRIPTION_CHUNK_SECONDS ?? '60', 10),
-    storageDir:
-      process.env.TRANSCRIPTION_STORAGE_DIR ??
-      join(process.cwd(), 'storage/transcripts'),
-    queueConcurrency: parseInt(
-      process.env.TRANSCRIPTION_QUEUE_CONCURRENCY ?? '3',
-      10,
-    ),
   },
   redis: {
     url: process.env.REDIS_URL ?? 'redis://localhost:6379',

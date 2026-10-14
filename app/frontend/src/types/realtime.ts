@@ -30,6 +30,11 @@ export interface UseRealtimeVoiceChatResult {
   /** Micrófono local silenciado (no envía audio a Jarvis). */
   muted: boolean;
   setMuted: (muted: boolean) => void;
+  /**
+   * En espera: Jarvis ni te oye ni se oye, sin colgar la sesión (mientras
+   * hablas directo con el visitante por el interfón).
+   */
+  setOnHold: (onHold: boolean) => void;
   /** Historial de la conversación (voz + texto). */
   turns: SessionTurn[];
   /** Envía un mensaje de texto a Jarvis en la sesión activa. */

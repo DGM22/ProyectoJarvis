@@ -3,12 +3,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
-import { GoogleModule } from './google/google.module';
 import { HealthModule } from './health/health.module';
 import { QueueModule } from './queue/queue.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SkillsModule } from './skills/skills.module';
-import { TranscriptsModule } from './transcripts/transcripts.module';
 import { WakeWordModule } from './wake-word/wake-word.module';
 import { KnowledgeBaseModule } from './knowledge-base/knowledge-base.module';
 import { DevicesModule } from './devices/devices.module';
@@ -31,7 +29,6 @@ import { ConsultModule } from './consult/consult.module';
     }),
     DatabaseModule,
     QueueModule,
-    GoogleModule,
     KnowledgeBaseModule,
     HouseholdModule,
     ConsultModule,
@@ -39,7 +36,6 @@ import { ConsultModule } from './consult/consult.module';
     HealthModule,
     RealtimeModule,
     WakeWordModule,
-    TranscriptsModule,
     DevicesModule,
   ],
 })

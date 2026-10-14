@@ -124,50 +124,6 @@ export class ActivityLogService {
     const r = (result ?? {}) as Record<string, unknown>;
 
     switch (toolName) {
-      case 'create_calendar_event':
-        return `Agendaste "${s(args.title)}"${args.start ? ` el ${s(args.start)}` : ''}`;
-      case 'list_calendar_events':
-        return 'Consultaste los próximos eventos del calendario';
-      case 'update_calendar_event':
-        return `Actualizaste el evento "${s(args.title ?? r.title ?? args.eventId)}"`;
-      case 'delete_calendar_event':
-        return `Eliminaste un evento del calendario`;
-
-      case 'create_task':
-        return `Creaste la tarea "${s(args.title)}"`;
-      case 'list_tasks':
-        return 'Consultaste la lista de tareas';
-      case 'get_task':
-        return `Consultaste los detalles de una tarea`;
-      case 'update_task':
-        return `Actualizaste la tarea "${s(args.title ?? r.title ?? args.taskId)}"`;
-      case 'complete_task':
-        return `Completaste la tarea "${s(r.title ?? args.taskId)}"`;
-      case 'delete_task':
-        return 'Eliminaste una tarea';
-
-      case 'list_gmail_messages':
-        return 'Revisaste la bandeja de Gmail';
-      case 'get_gmail_message':
-        return 'Leíste un correo de Gmail';
-      case 'create_gmail_draft':
-        return `Redactaste un borrador${args.to ? ` para ${s(args.to)}` : ''}${args.subject ? ` con asunto "${s(args.subject)}"` : ''}`;
-      case 'update_gmail_draft':
-        return 'Actualizaste un borrador de Gmail';
-      case 'delete_gmail_message':
-        return 'Eliminaste un correo de Gmail';
-
-      case 'create_drive_file':
-        return `Creaste el archivo "${s(args.name ?? args.title)}" en Drive`;
-      case 'list_drive_files':
-        return 'Consultaste archivos de Drive';
-      case 'get_drive_file':
-        return 'Consultaste un archivo de Drive';
-      case 'update_drive_file':
-        return `Actualizaste un archivo en Drive`;
-      case 'delete_drive_file':
-        return 'Eliminaste un archivo de Drive';
-
       case 'create_agent':
         return `Creaste el agente "${s(args.name ?? r.name)}"`;
       case 'list_agents':
@@ -185,8 +141,6 @@ export class ActivityLogService {
         return `Guardaste el hecho "${s(args.subject)}"`;
       case 'kb_disputed_fact':
         return `Detectaste una posible contradicción en "${s(args.subject)}"`;
-      case 'kb_passive_extract':
-        return `Aprendiste (pasivo) el hecho "${s(args.subject)}"`;
 
       default:
         return `Ejecutaste ${toolName}`;
@@ -205,26 +159,6 @@ function s(value: unknown): string {
 
 /** Nombres legibles de cada herramienta, usados en los mensajes de error. */
 const TOOL_LABELS: Record<string, string> = {
-  create_calendar_event: 'crear evento',
-  list_calendar_events: 'listar eventos',
-  update_calendar_event: 'actualizar evento',
-  delete_calendar_event: 'eliminar evento',
-  create_task: 'crear tarea',
-  list_tasks: 'listar tareas',
-  get_task: 'obtener tarea',
-  update_task: 'actualizar tarea',
-  complete_task: 'completar tarea',
-  delete_task: 'eliminar tarea',
-  list_gmail_messages: 'listar correos',
-  get_gmail_message: 'leer correo',
-  create_gmail_draft: 'crear borrador',
-  update_gmail_draft: 'actualizar borrador',
-  delete_gmail_message: 'eliminar correo',
-  create_drive_file: 'crear archivo',
-  list_drive_files: 'listar archivos',
-  get_drive_file: 'obtener archivo',
-  update_drive_file: 'actualizar archivo',
-  delete_drive_file: 'eliminar archivo',
   create_agent: 'crear agente',
   list_agents: 'listar agentes',
   run_agent: 'ejecutar agente',
@@ -233,5 +167,4 @@ const TOOL_LABELS: Record<string, string> = {
   kb_search: 'buscar en knowledge base',
   kb_save_fact: 'guardar hecho',
   kb_disputed_fact: 'registrar disputa de hecho',
-  kb_passive_extract: 'extraer hecho pasivo',
 };

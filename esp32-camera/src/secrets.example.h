@@ -11,3 +11,6 @@
 
 /** Dispositivo aparte del timbre (Config → Crear dispositivo → "Cámara puerta"). */
 #define JARVIS_DEVICE_TOKEN "jdv_replace_me"
+
+/** Opcional: token para la voz (/devices). Si no se define, usa JARVIS_DEVICE_TOKEN. */
+// #define JARVIS_VOICE_TOKEN "jdv_replace_me"

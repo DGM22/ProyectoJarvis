@@ -7,7 +7,7 @@ export interface RealtimeFunctionTool {
 }
 
 /**
- * Persona de la sesión de voz: `assistant` (Jarvis + Google), `doorbell`
+ * Persona de la sesión de voz: `assistant` (Jarvis en la casa), `doorbell`
  * (visitante en el timbre) o `security` (dueño atendiendo una consulta).
  */
 export type SessionMode = 'assistant' | 'doorbell' | 'security';
@@ -25,8 +25,8 @@ export interface ToolExecutionContext {
 /**
  * Contrato de una capacidad que Jarvis puede ejecutar por voz.
  *
- * Cada skill agrupa las herramientas de un dominio (Calendar, Tasks, Gmail,
- * Drive) y sabe resolverlas por nombre.
+ * Cada skill agrupa las herramientas de un dominio (casa, conocimiento,
+ * timbre) y sabe resolverlas por nombre.
  */
 export interface Skill {
   readonly name: string;

@@ -33,6 +33,8 @@ interface VoiceSessionContextValue {
   muted: boolean;
   setMuted: (muted: boolean) => void;
   toggleMute: () => void;
+  /** Pone a Jarvis en espera (interfón con el visitante) sin colgar. */
+  setOnHold: (onHold: boolean) => void;
   turns: SessionTurn[];
   sendText: (text: string) => boolean;
   latencyMs: number | null;
@@ -48,8 +50,6 @@ interface VoiceSessionContextValue {
   startSecurityCall: (consultId: string) => void;
   callMode: VoiceCallMode;
   consultId: string | null;
-  /** Pausa el wake-word / evita pelear por el micrófono (ej. modo transcripción). */
-  setMicBusy: (busy: boolean) => void;
 }
 
 const VoiceSessionContext = createContext<VoiceSessionContextValue | null>(
@@ -65,6 +65,7 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
     isActive,
     muted,
     setMuted,
+    setOnHold,
     turns,
     sendText,
     latencyMs,
@@ -78,14 +79,13 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
   // `suspended` cubre la ventana entre disparar la llamada y tenerla activa,
   // más el margen de re-armado posterior.
   const [suspended, setSuspended] = useState(false);
-  const [micBusy, setMicBusy] = useState(false);
   const lastDetectionRef = useRef(0);
   const rearmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startWithSelectedVoice = useCallback(() => {
     if (isActive) return;
     // Pausar el detector antes de pedir el micrófono: si ambos flujos lo toman a
-    // la vez, la transcripción de entrada de la sesión Realtime se degrada y los
+    // la vez, el reconocimiento de la sesión Realtime se degrada y los
     // comandos de voz dejan de reconocerse.
     setSuspended(true);
     void start({ voice: toRealtimeVoice(voice) });
@@ -145,7 +145,7 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
 
   const { status: wakeWordStatus } = useWakeWord({
     enabled: wakeWordEnabled,
-    paused: isActive || suspended || micBusy,
+    paused: isActive || suspended,
     onWakeWord: handleWakeWord,
   });
 
@@ -157,6 +157,7 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
       muted,
       setMuted,
       toggleMute,
+      setOnHold,
       turns,
       sendText,
       latencyMs,
@@ -171,7 +172,6 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
       startSecurityCall,
       callMode,
       consultId,
-      setMicBusy,
     }),
     [
       status,
@@ -180,6 +180,7 @@ export function VoiceSessionProvider({ children }: { children: ReactNode }) {
       muted,
       setMuted,
       toggleMute,
+      setOnHold,
       turns,
       sendText,
       latencyMs,

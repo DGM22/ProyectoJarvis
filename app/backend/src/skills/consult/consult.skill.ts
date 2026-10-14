@@ -8,7 +8,8 @@ import type {
 
 /**
  * Llamadas entre agentes: el timbre llama al dueño (`call_owner`) y el dueño
- * responde al timbre (`instruct_doorbell`) desde su sesión web.
+ * responde al timbre (`instruct_doorbell`) desde su sesión web, o pide hablar
+ * él mismo con el visitante por el interfón (`connect_visitor`).
  */
 @Injectable()
 export class ConsultSkill implements Skill {
@@ -57,6 +58,21 @@ export class ConsultSkill implements Skill {
       },
       {
         type: 'function',
+        name: 'connect_visitor',
+        description:
+          'Connect the owner to talk directly with the visitor through the doorbell speaker (intercom), without you relaying. Use when the owner says things like "pásamelo", "comunícame", "déjame hablar con él", "quiero hablarle yo". After calling it, say only a very short confirmation (e.g. "Te comunico") and stay silent: the owner will talk directly with the visitor.',
+        parameters: {
+          type: 'object',
+          properties: {
+            consult_id: {
+              type: 'string',
+              description: 'Optional consult id; defaults to the active doorbell consult',
+            },
+          },
+        },
+      },
+      {
+        type: 'function',
         name: 'end_consult',
         description:
           'Close the active doorbell consult when the matter is resolved or the owner says he is done.',
@@ -98,6 +114,27 @@ export class ConsultSkill implements Skill {
           this.resolveConsultId(args, context),
           this.requireString(args.instruction, 'instruction'),
         );
+
+      case 'connect_visitor': {
+        if (context?.mode === 'doorbell') {
+          throw new BadRequestException(
+            'connect_visitor is only available to the owner',
+          );
+        }
+        const result = this.consultService.requestIntercom(
+          this.resolveConsultId(args, context),
+        );
+        return result.delivered
+          ? {
+              ...result,
+              message:
+                'Conectando al dueño con el visitante. Di solo "Te comunico" y guarda silencio; cuando el dueño regrese contigo te avisaré.',
+            }
+          : {
+              ...result,
+              message: 'El visitante ya no está en la puerta. Avísale al dueño.',
+            };
+      }
 
       case 'end_consult': {
         const snapshot = this.consultService.close(

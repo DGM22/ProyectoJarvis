@@ -11,7 +11,6 @@ import {
   SECURITY_OPERATIONAL_RULES,
 } from '../agents/security-agent.constants';
 import { ConsultService } from '../consult/consult.service';
-import { GoogleAuthService } from '../google/google-auth.service';
 import { HouseholdService } from '../household/household.service';
 import { KbFactsService } from '../knowledge-base/kb-facts.service';
 import type { SessionMode } from '../skills/skill.interface';
@@ -66,7 +65,6 @@ export class RealtimeSessionConfigService {
   constructor(
     private readonly configService: ConfigService,
     private readonly skillsRegistry: SkillsRegistryService,
-    private readonly googleAuthService: GoogleAuthService,
     private readonly activityLogService: ActivityLogService,
     private readonly agentsService: AgentsService,
     private readonly kbFactsService: KbFactsService,
@@ -150,7 +148,6 @@ export class RealtimeSessionConfigService {
         SECURITY_OPERATIONAL_RULES,
         ...common,
         this.consultService.buildOwnerContext(options.consultId),
-        await this.buildGoogleHint(),
         'After a tool succeeds, confirm the result briefly in clear neutral Spanish.',
         options.extraInstructions,
         kbCoreContext,
@@ -160,11 +157,6 @@ export class RealtimeSessionConfigService {
         'You are Jarvis, a helpful voice assistant for the owner of the house.',
         'Open every conversation with exactly this short greeting in Spanish: "Hola, ¿en qué te puedo ayudar?" Then stop and wait for the user.',
         ...common,
-        await this.buildGoogleHint(),
-        'When the user asks to schedule events, manage tasks, manage Gmail, or manage Drive files, ask clarifying questions until you have title, date, and time.',
-        'Before calling create_calendar_event, create_task, get_task, update_task, complete_task, delete_task, list_gmail_messages, get_gmail_message, create_gmail_draft, update_gmail_draft, delete_gmail_message, create_drive_file, get_drive_file, update_drive_file, delete_drive_file, confirm missing details with the user.',
-        'Before delete_calendar_event or delete_task, ask for explicit confirmation.',
-        'Use list_calendar_events, list_tasks, list_gmail_messages, or list_drive_files first when you need an ID for update/delete/complete operations.',
         'When the owner asks to add or update someone who lives in the house, use household_save_member.',
         'When the user says to remember something lasting about the house, preferences, or procedures, call kb_save_fact with a clear canonical_text. Use kb_search when you need details beyond the core knowledge block.',
         'When the user sends a text message during the call, treat it as first-class input with the same priority as speech. Use any details in that text as ground truth for tools.',
@@ -193,13 +185,6 @@ export class RealtimeSessionConfigService {
         output: audioOutput,
       },
     };
-  }
-
-  private async buildGoogleHint(): Promise<string> {
-    const googleStatus = await this.googleAuthService.getStatus();
-    return googleStatus.connected
-      ? `Google account connected${googleStatus.email ? ` (${googleStatus.email})` : ''}.`
-      : 'Google is NOT connected yet. If the user asks for calendar, tasks, Gmail, or Drive actions, tell them to open GET /google/auth/connect in the browser to connect Google first.';
   }
 
   private buildAudioConfig(

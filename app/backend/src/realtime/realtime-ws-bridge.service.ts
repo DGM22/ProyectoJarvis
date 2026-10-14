@@ -22,7 +22,12 @@ export interface DeviceBridgeCallbacks {
   onSessionReady: () => void;
   onSessionEnd: (reason: string) => void;
   onError: (message: string) => void;
+  /** Mensajes de control extra hacia el ESP32 (modo interfón). */
+  onControl?: (message: DeviceControlMessage) => void;
 }
+
+export type DeviceControlMessage =
+  { type: 'intercom.start' } | { type: 'intercom.end' };
 
 export type DeviceDisplayState =
   'idle' | 'connecting' | 'listening' | 'speaking' | 'error';
@@ -59,6 +64,17 @@ interface BridgeState {
   paused: boolean;
   /** Pausa solicitada; se aplica al terminar la frase en curso ("un momento…"). */
   pausePending: boolean;
+  /** Interfón activo: el mic del visitante va al dueño, no a OpenAI. */
+  intercomSink: ((pcm16k: Buffer) => void) | null;
+  /** Interfón pedido: la IA dice la frase de cambio y luego se activa. */
+  intercomPending: {
+    sink: (pcm16k: Buffer) => void;
+    onLive: () => void;
+  } | null;
+  intercomFallback: NodeJS.Timeout | null;
+  /** Diagnóstico del mic de la puerta: se reporta cada `AUDIO_DIAG_MS`. */
+  diag: { frames: number; peak: number; speechStarted: number };
+  diagTimer: NodeJS.Timeout | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,6 +83,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const DEVICE_PCM_RATE = 16000;
 const OPENAI_PCM_RATE = 24000;
+/** Cada cuánto se loguea qué tanto audio del mic llega y qué oyó OpenAI. */
+const AUDIO_DIAG_MS = 5000;
+
+/** Pico de un frame PCM16 en dBFS (diagnóstico del mic). */
+function peakDbfs(pcm: Buffer): number {
+  let peak = 0;
+  for (let i = 0; i + 1 < pcm.length; i += 2) {
+    const v = Math.abs(pcm.readInt16LE(i));
+    if (v > peak) peak = v;
+  }
+  return peak === 0 ? -120 : 20 * Math.log10(peak / 32768);
+}
+
+/** Si la frase de cambio no termina (error de OpenAI), el interfón abre igual. */
+const INTERCOM_HANDOFF_MAX_MS = 8000;
 
 /**
  * Puente OpenAI Realtime por WebSocket para clientes sin WebRTC (ESP32).
@@ -173,13 +204,35 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       queuedResponse: null,
       paused: false,
       pausePending: false,
+      intercomSink: null,
+      intercomPending: null,
+      intercomFallback: null,
+      diag: { frames: 0, peak: -120, speechStarted: 0 },
+      diagTimer: null,
     };
     this.bridges.set(deviceKey, bridge);
+    bridge.diagTimer = setInterval(() => this.logAudioDiag(deviceKey), AUDIO_DIAG_MS);
 
     if (mode === 'doorbell') {
       this.consultService.registerDoorbell(deviceKey, {
         pause: () => this.pause(deviceKey),
         resume: (instruction) => this.resume(deviceKey, instruction),
+        startIntercom: (toOwner, handoff, onLive) =>
+          this.startIntercom(deviceKey, toOwner, handoff, onLive),
+        sendToVisitor: (pcm16k) => {
+          const current = this.bridges.get(deviceKey);
+          if (current?.intercomSink && !current.closed) {
+            current.callbacks.onAudioOut(pcm16k);
+          }
+        },
+        setOwnerTalking: (talking) => {
+          const current = this.bridges.get(deviceKey);
+          if (current?.intercomSink && !current.closed) {
+            // El ESP32 silencia su mic con 'speaking': así no regresa tu voz.
+            current.callbacks.onDisplay(talking ? 'speaking' : 'listening');
+          }
+        },
+        stopIntercom: (note) => this.stopIntercom(deviceKey, note),
       });
     }
 
@@ -216,7 +269,18 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
    */
   appendInputAudio(deviceKey: string, pcm16k: Buffer): void {
     const bridge = this.bridges.get(deviceKey);
-    if (!bridge || bridge.closed || bridge.speaking || bridge.paused) {
+    if (!bridge || bridge.closed) {
+      return;
+    }
+    bridge.diag.frames++;
+    bridge.diag.peak = Math.max(bridge.diag.peak, peakDbfs(pcm16k));
+
+    // Interfón: la voz del visitante va directo al dueño, OpenAI no la oye.
+    if (bridge.intercomSink) {
+      bridge.intercomSink(pcm16k);
+      return;
+    }
+    if (bridge.intercomPending || bridge.speaking || bridge.paused) {
       return;
     }
     if (bridge.openaiWs.readyState !== WebSocket.OPEN) {
@@ -275,6 +339,132 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     bridge.callbacks.onDisplay('listening');
   }
 
+  /**
+   * Entra al interfón. Con `handoff`, la IA dice esa frase (cancelando lo que
+   * estuviera diciendo) y el cambio ocurre en su `response.done`.
+   */
+  private startIntercom(
+    deviceKey: string,
+    toOwner: (pcm16k: Buffer) => void,
+    handoff: string | null,
+    onLive: () => void,
+  ): void {
+    const bridge = this.bridges.get(deviceKey);
+    if (!bridge || bridge.closed) {
+      return;
+    }
+    bridge.pausePending = false;
+    bridge.intercomPending = { sink: toOwner, onLive };
+
+    if (!handoff) {
+      this.activateIntercom(deviceKey, bridge);
+      return;
+    }
+
+    bridge.paused = false;
+    if (bridge.responseActive) {
+      this.send(bridge.openaiWs, { type: 'response.cancel' });
+    }
+    this.send(bridge.openaiWs, { type: 'input_audio_buffer.clear' });
+    this.send(bridge.openaiWs, {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'system',
+        content: [{ type: 'input_text', text: handoff }],
+      },
+    });
+    this.requestResponse(bridge, { type: 'response.create' });
+    bridge.intercomFallback = setTimeout(() => {
+      const current = this.bridges.get(deviceKey);
+      if (current?.intercomPending) {
+        this.logger.warn(
+          `Doorbell ${deviceKey} handoff timed out, opening intercom`,
+        );
+        this.activateIntercom(deviceKey, current);
+      }
+    }, INTERCOM_HANDOFF_MAX_MS);
+    this.logger.log(`Doorbell ${deviceKey} intercom handoff`);
+  }
+
+  private activateIntercom(deviceKey: string, bridge: BridgeState): void {
+    const pending = bridge.intercomPending;
+    if (!pending || bridge.closed) {
+      return;
+    }
+    if (bridge.intercomFallback) {
+      clearTimeout(bridge.intercomFallback);
+      bridge.intercomFallback = null;
+    }
+    bridge.intercomPending = null;
+    bridge.intercomSink = pending.sink;
+    // La IA queda muda y sorda (sin cerrar la sesión: conserva el contexto).
+    bridge.paused = true;
+    bridge.speaking = false;
+    this.send(bridge.openaiWs, { type: 'input_audio_buffer.clear' });
+    bridge.callbacks.onControl?.({ type: 'intercom.start' });
+    bridge.callbacks.onDisplay('listening');
+    this.logger.log(`Doorbell ${deviceKey} intercom on`);
+    pending.onLive();
+  }
+
+  /** Sale del interfón: la IA sigue en espera y sabe que el dueño habló. */
+  private stopIntercom(deviceKey: string, note: string): void {
+    const bridge = this.bridges.get(deviceKey);
+    if (
+      !bridge ||
+      bridge.closed ||
+      (!bridge.intercomSink && !bridge.intercomPending)
+    ) {
+      return;
+    }
+    if (bridge.intercomFallback) {
+      clearTimeout(bridge.intercomFallback);
+      bridge.intercomFallback = null;
+    }
+    bridge.intercomSink = null;
+    bridge.intercomPending = null;
+    bridge.paused = true;
+    bridge.pausePending = false;
+    this.send(bridge.openaiWs, { type: 'input_audio_buffer.clear' });
+    // Contexto sin pedir respuesta: la IA solo habla cuando la reanuden.
+    this.send(bridge.openaiWs, {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'system',
+        content: [{ type: 'input_text', text: note }],
+      },
+    });
+    bridge.callbacks.onControl?.({ type: 'intercom.end' });
+    bridge.callbacks.onDisplay('connecting');
+    this.logger.log(`Doorbell ${deviceKey} intercom off`);
+  }
+
+  /**
+   * Una línea por intervalo: frames del mic recibidos (50/s = continuo), su
+   * pico y cuántas veces OpenAI detectó voz. Mic con frames pero sin voz
+   * detectada = llega muy bajo o con ruido; sin frames = la ESP32 no manda.
+   */
+  private logAudioDiag(deviceKey: string): void {
+    const bridge = this.bridges.get(deviceKey);
+    if (!bridge || bridge.closed) {
+      return;
+    }
+    const { frames, peak, speechStarted } = bridge.diag;
+    const state = bridge.intercomSink
+      ? 'interfon'
+      : bridge.paused
+        ? 'en espera'
+        : bridge.speaking
+          ? 'IA hablando'
+          : 'escuchando';
+    this.logger.log(
+      `Mic ${deviceKey} [${state}]: ${frames} frames/${AUDIO_DIAG_MS / 1000}s, pico ${peak.toFixed(1)} dBFS, voz detectada ${speechStarted}x`,
+    );
+    bridge.diag = { frames: 0, peak: -120, speechStarted: 0 };
+  }
+
   private requestResponse(
     bridge: BridgeState,
     payload: Record<string, unknown>,
@@ -293,6 +483,14 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       return;
     }
     bridge.closed = true;
+    if (bridge.diagTimer) {
+      clearInterval(bridge.diagTimer);
+      bridge.diagTimer = null;
+    }
+    if (bridge.intercomFallback) {
+      clearTimeout(bridge.intercomFallback);
+      bridge.intercomFallback = null;
+    }
     try {
       if (bridge.openaiWs.readyState === WebSocket.OPEN) {
         bridge.openaiWs.close();
@@ -382,6 +580,15 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       this.captureTranscript(deviceKey, type, event);
     }
 
+    if (type === 'input_audio_buffer.speech_started') {
+      bridge.diag.speechStarted++;
+    }
+    if (type === 'conversation.item.input_audio_transcription.completed') {
+      this.logger.log(
+        `Mic ${deviceKey} OpenAI entendió: "${String(event.transcript ?? '').trim()}"`,
+      );
+    }
+
     if (
       type === 'input_audio_buffer.speech_started' ||
       type === 'input_audio_buffer.speech_stopped'
@@ -442,6 +649,12 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         const queued = bridge.queuedResponse;
         bridge.queuedResponse = null;
         this.requestResponse(bridge, queued);
+        return;
+      }
+
+      // Terminó "te comunico…": ahora sí habla el dueño.
+      if (bridge.intercomPending) {
+        this.activateIntercom(deviceKey, bridge);
         return;
       }
 

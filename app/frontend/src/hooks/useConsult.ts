@@ -7,7 +7,11 @@ const RECONNECT_MS = 3000;
 /** Conserva consultas terminadas un rato para mostrar el cierre en pantalla. */
 const ENDED_VISIBLE_MS = 15_000;
 
-type ConsultAction = 'consult.accept' | 'consult.decline' | 'consult.close';
+type ConsultAction =
+  | 'consult.accept'
+  | 'consult.decline'
+  | 'consult.close'
+  | 'consult.intercom.start';
 
 /**
  * Suscripción al WS `/consult`: anillo del timbre y estado de la consulta.
@@ -99,5 +103,10 @@ export function useConsult() {
     accept: useCallback((id: string) => send('consult.accept', id), [send]),
     decline: useCallback((id: string) => send('consult.decline', id), [send]),
     close: useCallback((id: string) => send('consult.close', id), [send]),
+    /** "Hablar directo": pide el interfón; la consulta pasa a `requested`. */
+    requestIntercom: useCallback(
+      (id: string) => send('consult.intercom.start', id),
+      [send],
+    ),
   };
 }

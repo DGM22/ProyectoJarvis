@@ -14,6 +14,12 @@ type CameraEntry = {
 
 /** Un frame más viejo que esto ya no representa la puerta "en vivo". */
 const LAST_FRAME_MAX_AGE_MS = 2000;
+/**
+ * Margen antes de mandar `stream.off` al quedarse sin viewers: al pasar de
+ * "sonando" a "en llamada" la app remonta la vista y por un instante hay 0
+ * viewers; sin margen la cámara se apagaba a media llamada.
+ */
+const STREAM_OFF_GRACE_MS = 5000;
 
 /**
  * Relé JPEG: una o más cámaras ESP32 → N viewers del browser.
@@ -26,6 +32,7 @@ export class CameraHubService {
   private readonly logger = new Logger(CameraHubService.name);
   private readonly cameras = new Map<number, CameraEntry>();
   private readonly viewers = new Set<WebSocket>();
+  private streamOffTimer: NodeJS.Timeout | null = null;
 
   isCameraOnline(deviceId: number): boolean {
     return this.cameras.has(deviceId);
@@ -83,15 +90,24 @@ export class CameraHubService {
     if (this.cameras.size === 0) {
       this.sendToViewer(socket, { type: 'stream.idle' });
     }
-    if (becameFirst) {
+    if (this.streamOffTimer) {
+      // Volvió un viewer dentro del margen: la cámara nunca se apagó.
+      clearTimeout(this.streamOffTimer);
+      this.streamOffTimer = null;
+    } else if (becameFirst) {
       this.setStreaming(true);
     }
   }
 
   removeViewer(socket: WebSocket): void {
     const had = this.viewers.delete(socket);
-    if (had && this.viewers.size === 0) {
-      this.setStreaming(false);
+    if (had && this.viewers.size === 0 && !this.streamOffTimer) {
+      this.streamOffTimer = setTimeout(() => {
+        this.streamOffTimer = null;
+        if (this.viewers.size === 0) {
+          this.setStreaming(false);
+        }
+      }, STREAM_OFF_GRACE_MS);
     }
   }
 
