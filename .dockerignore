@@ -1,0 +1,17 @@
+# Contexto de build = raíz del monorepo (pnpm workspace). Solo entra lo que
+# necesitan app/backend y app/frontend; los secretos llegan en runtime.
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+**/coverage
+.git
+.env
+.env.*
+!.env.example
+app/backend/storage
+esp32-camera
+esp32-tests
+firmware
+**/.pio
+**/.DS_Store

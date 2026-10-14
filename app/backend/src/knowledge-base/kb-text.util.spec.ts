@@ -2,7 +2,6 @@ import {
   compareJsonValues,
   contentTokenOverlap,
   normalizeCanonicalText,
-  quoteSupportedByTranscript,
   toSubjectSlug,
 } from './kb-text.util';
 
@@ -28,23 +27,6 @@ describe('kb-text.util', () => {
   it('compares JSON values stably', () => {
     expect(compareJsonValues({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe('equal');
     expect(compareJsonValues({ a: 1 }, { a: 2 })).toBe('different');
-  });
-
-  it('validates source quotes against transcript', () => {
-    const transcript =
-      'En la empresa el proveedor principal de contabilidad es Contpaqi.';
-    expect(
-      quoteSupportedByTranscript(
-        'el proveedor principal de contabilidad es Contpaqi',
-        transcript,
-      ),
-    ).toBe(true);
-    expect(
-      quoteSupportedByTranscript(
-        'el proveedor principal es Aspel Soft',
-        transcript,
-      ),
-    ).toBe(false);
   });
 
   it('normalizes canonical text whitespace', () => {

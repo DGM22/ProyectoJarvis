@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { deriveWsUrl } from '@/lib/wsUrl';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import { API_BASE_URL } from '@/lib/api/http';
 
 export type CameraStreamStatus =
   | 'idle'
@@ -97,3 +95,5 @@ export function useCameraStream(enabled: boolean) {
 
   return { status, frameUrl, cameraName };
 }
+
+export type CameraStream = ReturnType<typeof useCameraStream>;

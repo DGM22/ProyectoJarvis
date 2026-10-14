@@ -7,11 +7,19 @@
 #include "img_converters.h"
 #include "robot_eyes.h"
 #include "secrets.h"
+#include "voice.h"
+
+/** Token del socket de voz; por defecto el mismo de la cámara. */
+#ifndef JARVIS_VOICE_TOKEN
+#define JARVIS_VOICE_TOKEN JARVIS_DEVICE_TOKEN
+#endif
 
 static constexpr int JPEG_QUALITY = 40;
 static constexpr int XCLK_HZ = 20000000;
 /** Tope de subida al backend; el encode software del GC0308 ronda esto. */
 static constexpr uint32_t MIN_FRAME_GAP_MS = 80;
+/** Durante una llamada de voz: ~6 FPS, suficiente para ver quién está. */
+static constexpr uint32_t CALL_FRAME_GAP_MS = 160;
 
 #define PWDN_GPIO_NUM -1
 #define RESET_GPIO_NUM -1
@@ -41,6 +49,8 @@ static constexpr int kReservedPins[] = {
     Y4_GPIO_NUM,   Y5_GPIO_NUM,   Y6_GPIO_NUM,   Y7_GPIO_NUM,   Y8_GPIO_NUM,
     Y9_GPIO_NUM,   VSYNC_GPIO_NUM, HREF_GPIO_NUM, PCLK_GPIO_NUM, OLED_SDA_PIN,
     OLED_SCL_PIN,
+    // Audio (voice.cpp): mic 40/39/21, MAX98357A 47/48/1.
+    40, 39, 21, 47, 48, 1,
 };
 
 // C++11 (toolchain Arduino 2.x): constexpr de un solo return.
@@ -50,7 +60,7 @@ static constexpr bool isReservedPin(int pin, size_t i = 0)
            (kReservedPins[i] == pin || isReservedPin(pin, i + 1));
 }
 
-static_assert(!isReservedPin(BUTTON_PIN), "BUTTON_PIN choca con la cámara o la OLED");
+static_assert(!isReservedPin(BUTTON_PIN), "BUTTON_PIN choca con la cámara, la OLED o el audio");
 static constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
 
 static WebSocketsClient webSocket;
@@ -59,11 +69,12 @@ static volatile bool streamEnabled = false;
 static bool cameraReady = false;
 static bool ntpDone = false;
 static bool backendStarted = false;
+static bool audioReady = false;
 
 static void sendHello()
 {
     webSocket.sendTXT(
-        "{\"type\":\"hello\",\"firmwareVersion\":\"0.4.0\",\"capabilities\":[\"camera\"]}");
+        "{\"type\":\"hello\",\"firmwareVersion\":\"0.5.0\",\"capabilities\":[\"camera\"]}");
 }
 
 static void handleServerText(const char *json)
@@ -168,19 +179,125 @@ static bool initCamera()
     return true;
 }
 
+static const char *wifiStatusText(wl_status_t status)
+{
+    switch (status) {
+    case WL_IDLE_STATUS:
+        return "IDLE";
+    case WL_NO_SSID_AVAIL:
+        return "NO_SSID";
+    case WL_SCAN_COMPLETED:
+        return "SCAN";
+    case WL_CONNECTED:
+        return "OK";
+    case WL_CONNECT_FAILED:
+        return "AUTH_FAIL";
+    case WL_CONNECTION_LOST:
+        return "LOST";
+    case WL_DISCONNECTED:
+        return "DISCONNECTED";
+    default:
+        return "?";
+    }
+}
+
+/** El iPhone anuncia "Daniel's" con ’ (U+2019), no con el ' del teclado. */
+static int apostropheLen(const char *text)
+{
+    const auto *bytes = reinterpret_cast<const uint8_t *>(text);
+    if (bytes[0] == '\'') {
+        return 1;
+    }
+    if (bytes[0] == 0xE2 && bytes[1] == 0x80 && (bytes[2] == 0x98 || bytes[2] == 0x99)) {
+        return 3;
+    }
+    return 0;
+}
+
+static bool ssidLooseEqual(const char *seen, const char *wanted)
+{
+    while (true) {
+        const int seenMark = apostropheLen(seen);
+        const int wantedMark = apostropheLen(wanted);
+        if (seenMark > 0 || wantedMark > 0) {
+            if (seenMark == 0 || wantedMark == 0) {
+                return false;
+            }
+            seen += seenMark;
+            wanted += wantedMark;
+            continue;
+        }
+        if (*seen != *wanted) {
+            return false;
+        }
+        if (*seen == '\0') {
+            return true;
+        }
+        ++seen;
+        ++wanted;
+    }
+}
+
+static char resolvedSsid[33];
+static bool resolvedReady = false;
+
+static const char *targetSsid()
+{
+    return resolvedReady ? resolvedSsid : WIFI_SSID;
+}
+
+static void adoptScannedSsid()
+{
+    const int count = WiFi.scanNetworks(false, true);
+    if (count <= 0) {
+        Serial.println("WiFi: ninguna red en 2.4 GHz");
+        Serial.println("iPhone: Ajustes > Hotspot personal > Maximizar compatibilidad");
+        WiFi.scanDelete();
+        return;
+    }
+
+    bool found = false;
+    for (int i = 0; i < count; i++) {
+        const String ssid = WiFi.SSID(i);
+        Serial.printf("  red: \"%s\" rssi=%d\n", ssid.c_str(), WiFi.RSSI(i));
+        if (found || !ssidLooseEqual(ssid.c_str(), WIFI_SSID)) {
+            continue;
+        }
+        strncpy(resolvedSsid, ssid.c_str(), sizeof(resolvedSsid) - 1);
+        resolvedSsid[sizeof(resolvedSsid) - 1] = '\0';
+        resolvedReady = true;
+        found = true;
+        if (strcmp(resolvedSsid, WIFI_SSID) != 0) {
+            Serial.println("WiFi: el apostrofe del iPhone no es el del teclado; uso el nombre real");
+        }
+    }
+    if (!found) {
+        Serial.printf("WiFi: no esta en el aire \"%s\"\n", WIFI_SSID);
+    }
+    WiFi.scanDelete();
+}
+
+static void beginWifi()
+{
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.begin(targetSsid(), WIFI_PASS);
+}
+
 static void startWifi()
 {
     WiFi.persistent(false);
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    Serial.println("WiFi conectando…");
+    WiFi.setAutoReconnect(true);
+    Serial.printf("WiFi buscando \"%s\"\n", WIFI_SSID);
+    beginWifi();
 }
 
 static void maintainWifi()
 {
     static uint32_t lastAttemptMs = 0;
+    static uint8_t failures = 0;
     if (WiFi.status() == WL_CONNECTED) {
+        failures = 0;
         return;
     }
 
@@ -189,9 +306,19 @@ static void maintainWifi()
         return;
     }
     lastAttemptMs = now;
-    Serial.println("WiFi reintento");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    failures++;
+    const wl_status_t status = WiFi.status();
+    Serial.printf("WiFi reintento (%s)\n", wifiStatusText(status));
+    if (status == WL_CONNECT_FAILED) {
+        Serial.println("WiFi: la red existe pero rechazo la contrasena");
+    }
+    if (failures == 1 || failures % 3 == 0) {
+        WiFi.disconnect(false, false);
+        adoptScannedSsid();
+    } else {
+        WiFi.disconnect(false, false);
+    }
+    beginWifi();
 }
 
 static void connectBackend()
@@ -211,9 +338,14 @@ static void connectBackend()
 #else
     webSocket.begin(JARVIS_BACKEND_HOST, JARVIS_BACKEND_PORT, path);
 #endif
+
+    if (audioReady) {
+        voiceConnect(JARVIS_BACKEND_HOST, JARVIS_BACKEND_PORT, JARVIS_VOICE_TOKEN,
+                     JARVIS_USE_TLS);
+    }
 }
 
-/** Dispara la animación al presionar (flanco HIGH→LOW estable). */
+/** Al presionar (flanco HIGH→LOW estable): habla con Jarvis o cuelga. */
 static void pollButton()
 {
     static bool stableLevel = HIGH;
@@ -233,8 +365,11 @@ static void pollButton()
 
     stableLevel = reading;
     if (stableLevel == LOW) {
-        Serial.println("boton: ojos felices");
+        Serial.println("boton");
         robotEyesPlayHappy();
+        if (audioReady) {
+            voiceToggleSession();
+        }
     }
 }
 
@@ -287,6 +422,7 @@ void setup()
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     robotEyesBegin(OLED_SDA_PIN, OLED_SCL_PIN);
     cameraReady = initCamera();
+    audioReady = voiceBegin();
     startWifi();
 }
 
@@ -323,6 +459,7 @@ void loop()
 
     if (backendStarted) {
         webSocket.loop();
+        voiceLoop();
     }
 
     pollButton();
@@ -330,7 +467,8 @@ void loop()
     if (!wsConnected) {
         robotEyesSetMood(EyesMood::Connecting);
     } else {
-        robotEyesSetMood(streamEnabled ? EyesMood::Watching : EyesMood::Idle);
+        robotEyesSetMood(streamEnabled || voiceInSession() ? EyesMood::Watching
+                                                           : EyesMood::Idle);
     }
 
     static uint32_t lastFrameMs = 0;
@@ -338,12 +476,16 @@ void loop()
     static uint32_t windowStart = 0;
 
     if (!wsConnected || !streamEnabled || !cameraReady) {
-        delay(20);
+        // En llamada el loop debe girar rápido para mover el audio del socket.
+        delay(voiceInSession() ? 1 : 20);
         return;
     }
 
+    // En llamada el video sigue (hay que ver quién está), pero más espaciado:
+    // cada encode JPEG frena el loop y el audio necesita ese tiempo.
     const uint32_t now = millis();
-    if (now - lastFrameMs < MIN_FRAME_GAP_MS) {
+    const uint32_t gap = voiceInSession() ? CALL_FRAME_GAP_MS : MIN_FRAME_GAP_MS;
+    if (now - lastFrameMs < gap) {
         return;
     }
     lastFrameMs = now;

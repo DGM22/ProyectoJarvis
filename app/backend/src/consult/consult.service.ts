@@ -15,6 +15,8 @@ import {
   type ConsultStatus,
   type ConsultTranscriptLine,
   type DoorbellController,
+  type IntercomState,
+  type OwnerIntercomLink,
   type OwnerSessionController,
 } from './consult.types';
 
@@ -32,6 +34,15 @@ const OWNER_LEFT_INSTRUCTION =
   'El dueño colgó sin dejar instrucción. Dile al visitante que por ahora no es posible atenderlo y ofrece tomar un recado.';
 const CLOSED_INSTRUCTION =
   'La consulta con el dueño terminó. Si el visitante sigue ahí, despídete con amabilidad u ofrece tomar un recado.';
+/** Lo único que dice la IA del timbre antes de ceder la bocina al dueño. */
+const INTERCOM_HANDOFF_INSTRUCTION =
+  'El dueño va a hablar directamente con el visitante por la bocina. Dile al visitante solo una frase muy corta, por ejemplo "Te comunico, un momento", y no digas nada más.';
+const INTERCOM_DOORBELL_NOTE =
+  'El dueño habló directamente con el visitante por el interfón (tú no escuchaste esa parte). El visitante sigue en la puerta; espera la siguiente instrucción.';
+const INTERCOM_BACK_TO_OWNER =
+  'El dueño terminó de hablar directo con el visitante, que sigue en la puerta en espera. Pregúntale brevemente si quiere que le digas algo más al visitante o terminar la consulta.';
+const INTERCOM_CLOSED_INSTRUCTION =
+  'El dueño ya habló directamente con el visitante y terminó la consulta. Si el visitante sigue ahí, despídete en una frase corta.';
 
 interface DoorbellSession {
   controller: DoorbellController;
@@ -51,6 +62,8 @@ interface ConsultState {
   endedAt: Date | null;
   ringExpiresAt: Date | null;
   ringTimer: NodeJS.Timeout | null;
+  intercom: IntercomState;
+  intercomLink: OwnerIntercomLink | null;
 }
 
 export interface CallOwnerResult {
@@ -191,6 +204,8 @@ export class ConsultService implements OnModuleDestroy {
       endedAt: null,
       ringExpiresAt: new Date(now.getTime() + RING_TIMEOUT_MS),
       ringTimer: null,
+      intercom: 'off',
+      intercomLink: null,
     };
     consult.ringTimer = setTimeout(() => this.handleNoAnswer(consult.id), RING_TIMEOUT_MS);
     this.consults.set(consult.id, consult);
@@ -254,6 +269,8 @@ export class ConsultService implements OnModuleDestroy {
     if (consult.status === 'ringing') {
       this.accept(consult.id);
     }
+    // Si Jarvis va a hablarle al visitante, el interfón se corta primero.
+    this.stopIntercom(consult, 'instructed');
 
     consult.lastInstruction = trimmed;
     consult.awaitingOwner = false;
@@ -279,6 +296,129 @@ export class ConsultService implements OnModuleDestroy {
     return this.toSnapshot(consult);
   }
 
+  // ---------------------------------------------------------------------------
+  // Interfón: el dueño habla directo con el visitante
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Pide el interfón (botón "Hablar directo" o "pásamelo" por voz). La web del
+   * dueño ve `intercom: 'requested'` y abre `/intercom`.
+   */
+  requestIntercom(consultId: string | undefined): InstructResult {
+    const consult = this.resolveActive(consultId);
+    if (!this.doorbells.has(consult.sessionKey)) {
+      this.endConsult(consult, 'visitor_left');
+      return {
+        delivered: false,
+        consultId: consult.id,
+        reason: 'visitor_left',
+      };
+    }
+    if (consult.status === 'ringing') {
+      this.accept(consult.id);
+    }
+    if (consult.intercom === 'off') {
+      consult.intercom = 'requested';
+      this.logger.log(`Consult ${consult.id} intercom requested`);
+      this.broadcastUpdate(consult);
+    }
+    return { delivered: true, consultId: consult.id };
+  }
+
+  /**
+   * Conecta el socket `/intercom` del dueño. Solo se acepta si la consulta
+   * pidió el interfón: el id (UUID) más ese estado hacen de candado.
+   */
+  attachIntercom(consultId: string, link: OwnerIntercomLink): boolean {
+    const consult = this.consults.get(consultId);
+    const doorbell = consult
+      ? this.doorbells.get(consult.sessionKey)
+      : undefined;
+    if (
+      !consult ||
+      !doorbell ||
+      !this.isActive(consult) ||
+      consult.intercom !== 'requested'
+    ) {
+      return false;
+    }
+
+    consult.intercomLink = link;
+    consult.intercom = 'connecting';
+    consult.awaitingOwner = false;
+    link.sendState('connecting');
+    this.broadcastUpdate(consult);
+
+    doorbell.controller.startIntercom(
+      (pcm16k) => link.sendAudio(pcm16k),
+      INTERCOM_HANDOFF_INSTRUCTION,
+      () => {
+        if (consult.intercomLink !== link) {
+          return;
+        }
+        consult.intercom = 'on';
+        link.sendState('on');
+        this.logger.log(`Consult ${consult.id} intercom on`);
+        this.broadcastUpdate(consult);
+      },
+    );
+    return true;
+  }
+
+  /** Voz del dueño hacia la puerta (ya filtrada por la compuerta de voz). */
+  ownerAudio(consultId: string, link: OwnerIntercomLink, pcm16k: Buffer): void {
+    const consult = this.consults.get(consultId);
+    if (
+      !consult ||
+      consult.intercomLink !== link ||
+      consult.intercom !== 'on'
+    ) {
+      return;
+    }
+    this.doorbells.get(consult.sessionKey)?.controller.sendToVisitor(pcm16k);
+  }
+
+  ownerTalking(
+    consultId: string,
+    link: OwnerIntercomLink,
+    talking: boolean,
+  ): void {
+    const consult = this.consults.get(consultId);
+    if (!consult || consult.intercomLink !== link) {
+      return;
+    }
+    this.doorbells.get(consult.sessionKey)?.controller.setOwnerTalking(talking);
+  }
+
+  /**
+   * Termina el interfón. `ai`: el visitante queda en espera y Jarvis retoma con
+   * el dueño. `close`: se cierra la consulta y el timbre se despide.
+   */
+  detachIntercom(
+    consultId: string,
+    link: OwnerIntercomLink,
+    then: 'ai' | 'close',
+  ): void {
+    const consult = this.consults.get(consultId);
+    if (!consult || consult.intercomLink !== link) {
+      return;
+    }
+    this.stopIntercom(consult, null);
+    if (!this.isActive(consult)) {
+      return;
+    }
+
+    if (then === 'close') {
+      this.resumeDoorbell(consult, INTERCOM_CLOSED_INSTRUCTION);
+      this.endConsult(consult, 'closed');
+      return;
+    }
+
+    consult.awaitingOwner = true;
+    this.ownerSessions.get(consult.id)?.notify(INTERCOM_BACK_TO_OWNER);
+    this.broadcastUpdate(consult);
+  }
+
   registerOwnerSession(consultId: string, controller: OwnerSessionController): void {
     this.ownerSessions.set(consultId, controller);
   }
@@ -292,6 +432,10 @@ export class ConsultService implements OnModuleDestroy {
 
     const consult = this.consults.get(consultId);
     if (!consult || consult.status !== 'answered') {
+      return;
+    }
+    // Colgar a Jarvis mientras hablas directo no corta la plática con el visitante.
+    if (consult.intercom !== 'off') {
       return;
     }
     if (consult.awaitingOwner) {
@@ -339,7 +483,7 @@ export class ConsultService implements OnModuleDestroy {
     return [
       'Hay alguien en el timbre esperando al dueño:',
       ...lines,
-      'Si el usuario te dice qué contestarle, llama instruct_doorbell; cuando termine, end_consult.',
+      'Si el usuario te dice qué contestarle, llama instruct_doorbell; si quiere hablar él mismo con el visitante, connect_visitor; cuando termine, end_consult.',
     ].join('\n');
   }
 
@@ -364,6 +508,8 @@ export class ConsultService implements OnModuleDestroy {
     try {
       if (message.type === 'consult.accept') {
         this.accept(message.consultId);
+      } else if (message.type === 'consult.intercom.start') {
+        this.requestIntercom(message.consultId);
       } else if (message.type === 'consult.decline') {
         this.decline(message.consultId);
       } else {
@@ -404,7 +550,25 @@ export class ConsultService implements OnModuleDestroy {
     this.doorbells.get(consult.sessionKey)?.controller.resume(instruction);
   }
 
+  /** Corta el interfón; `reason` cierra también el socket del dueño. */
+  private stopIntercom(consult: ConsultState, reason: string | null): void {
+    if (consult.intercom === 'off') {
+      return;
+    }
+    const link = consult.intercomLink;
+    consult.intercom = 'off';
+    consult.intercomLink = null;
+    this.doorbells
+      .get(consult.sessionKey)
+      ?.controller.stopIntercom(INTERCOM_DOORBELL_NOTE);
+    if (link && reason) {
+      link.close(reason);
+    }
+    this.logger.log(`Consult ${consult.id} intercom off`);
+  }
+
   private endConsult(consult: ConsultState, status: ConsultStatus): void {
+    this.stopIntercom(consult, status);
     this.clearRingTimer(consult);
     consult.status = status;
     consult.awaitingOwner = false;
@@ -472,6 +636,7 @@ export class ConsultService implements OnModuleDestroy {
       visitorSummary: consult.visitorSummary,
       awaitingOwner: consult.awaitingOwner,
       lastInstruction: consult.lastInstruction,
+      intercom: consult.intercom,
       transcript: [...(this.doorbells.get(consult.sessionKey)?.transcript ?? [])],
       createdAt: consult.createdAt.toISOString(),
       answeredAt: consult.answeredAt?.toISOString() ?? null,
@@ -521,7 +686,8 @@ export class ConsultService implements OnModuleDestroy {
     if (
       (type === 'consult.accept' ||
         type === 'consult.decline' ||
-        type === 'consult.close') &&
+        type === 'consult.close' ||
+        type === 'consult.intercom.start') &&
       typeof consultId === 'string' &&
       consultId.length > 0
     ) {

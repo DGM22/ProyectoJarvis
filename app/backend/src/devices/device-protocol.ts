@@ -58,6 +58,13 @@ export type ServerToDeviceMessage =
       voice?: string;
     }
   | {
+      /** El dueño habla directo por la bocina: modo de baja latencia. */
+      type: 'intercom.start';
+    }
+  | {
+      type: 'intercom.end';
+    }
+  | {
       type: 'error';
       message: string;
     };

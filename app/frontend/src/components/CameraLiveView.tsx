@@ -1,4 +1,4 @@
-import { useCameraStream } from '@/hooks/useCameraStream';
+import { useCameraStream, type CameraStream } from '@/hooks/useCameraStream';
 import { cn } from '@/lib/utils';
 
 const STATUS_COPY: Record<string, string> = {
@@ -12,14 +12,24 @@ const STATUS_COPY: Record<string, string> = {
 export function CameraLiveView({
   enabled = true,
   compact = false,
+  stream,
   className,
+  imageClassName,
 }: {
   enabled?: boolean;
   /** Versión reducida para el anillo del timbre y el panel flotante. */
   compact?: boolean;
+  /**
+   * Stream compartido. Si se pasa, la vista no abre su propio socket: así una
+   * llamada que cambia de pantalla no corta ni reconecta el video.
+   */
+  stream?: CameraStream;
   className?: string;
+  /** Sobrescribe el alto máximo de la imagen. */
+  imageClassName?: string;
 }) {
-  const { status, frameUrl, cameraName } = useCameraStream(enabled);
+  const own = useCameraStream(enabled && !stream);
+  const { status, frameUrl, cameraName } = stream ?? own;
 
   return (
     <section
@@ -63,6 +73,7 @@ export function CameraLiveView({
             className={cn(
               'block w-full object-contain',
               compact ? 'max-h-[240px]' : 'max-h-[420px]',
+              imageClassName,
             )}
           />
         ) : compact ? (

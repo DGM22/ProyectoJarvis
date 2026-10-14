@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '@/lib/api/http';
+
 export type DeviceDto = {
   id: number;
   name: string;
@@ -12,9 +14,6 @@ export type DeviceDto = {
 };
 
 export type DeviceCreatedDto = DeviceDto & { token: string };
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {

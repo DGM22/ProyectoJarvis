@@ -1,5 +1,14 @@
-export const API_BASE_URL =
+const RAW_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+
+/**
+ * Base del backend. Acepta URL absoluta (dev: `http://localhost:3000`) o una
+ * ruta del mismo dominio (Docker + Traefik: `/api`), que se resuelve contra el
+ * origen de la página para que también sirva al derivar `wss://` en los sockets.
+ */
+export const API_BASE_URL = RAW_API_BASE_URL.startsWith('/')
+  ? `${window.location.origin}${RAW_API_BASE_URL.replace(/\/+$/, '')}`
+  : RAW_API_BASE_URL;
 
 /** Lee JSON o lanza con el `message` que devuelve Nest. */
 export async function parseJson<T>(response: Response): Promise<T> {

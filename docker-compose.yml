@@ -1,4 +1,107 @@
+# Stack completo detrás de Traefik. El túnel de Cloudflare apunta a
+# http://localhost:80 y Traefik reparte por dominio y ruta:
+#   https://jarvis.gms-app.com/          → frontend (nginx)
+#   https://jarvis.gms-app.com/api/...   → backend (sin el prefijo /api)
+#   /camera, /devices, /wake-word        → backend (rutas de la ESP32 ya flasheada)
+#
+#   docker compose up -d --build
+
 services:
+  traefik:
+    image: traefik:v3.1
+    container_name: jarvis-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      # Solo se publica lo que tenga `traefik.enable=true`.
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      # cloudflared corre en esta misma máquina: confiar en sus X-Forwarded-*.
+      - --entrypoints.web.forwardedheaders.insecure=true
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - '80:80'
+      # Dashboard solo local: http://localhost:8080
+      - '127.0.0.1:8080:8080'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  backend-migrate:
+    # Corre las migraciones de Sequelize una vez antes de arrancar el backend.
+    build:
+      context: .
+      dockerfile: app/backend/Dockerfile
+      target: build
+    container_name: jarvis-backend-migrate
+    working_dir: /repo/app/backend
+    command: ['pnpm', 'sequelize:migrate']
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    build:
+      context: .
+      dockerfile: app/backend/Dockerfile
+    container_name: jarvis-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dentro de Docker los servicios se ven por nombre, no por localhost.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379
+      WAKEWORD_SERVICE_URL: ws://wakeword:8765
+      BACKEND_PORT: 3000
+      FRONTEND_ORIGIN: https://jarvis.gms-app.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.jarvis-backend.loadbalancer.server.port=3000
+      # Navegador: /api/* → backend sin el prefijo (HTTP y WebSockets).
+      - traefik.http.middlewares.jarvis-api-strip.stripprefix.prefixes=/api
+      - traefik.http.routers.jarvis-api.rule=PathPrefix(`/api`) && ${JARVIS_HOST_RULE:-(Host(`jarvis.gms-app.com`) || Host(`localhost`))}
+      - traefik.http.routers.jarvis-api.entrypoints=web
+      - traefik.http.routers.jarvis-api.middlewares=jarvis-api-strip
+      - traefik.http.routers.jarvis-api.service=jarvis-backend
+      # ESP32: el firmware ya flasheado se conecta sin /api.
+      - traefik.http.routers.jarvis-devices.rule=(Path(`/camera`) || Path(`/devices`) || Path(`/wake-word`)) && ${JARVIS_HOST_RULE:-(Host(`jarvis.gms-app.com`) || Host(`localhost`))}
+      - traefik.http.routers.jarvis-devices.entrypoints=web
+      - traefik.http.routers.jarvis-devices.service=jarvis-backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: app/frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: jarvis-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.jarvis-frontend.loadbalancer.server.port=80
+      # Todo lo demás del dominio es la SPA (las rutas de arriba ganan por ser más largas).
+      - traefik.http.routers.jarvis-frontend.rule=${JARVIS_HOST_RULE:-(Host(`jarvis.gms-app.com`) || Host(`localhost`))}
+      - traefik.http.routers.jarvis-frontend.entrypoints=web
+      - traefik.http.routers.jarvis-frontend.service=jarvis-frontend
+
   postgres:
     image: pgvector/pgvector:pg17
     container_name: jarvis-postgres

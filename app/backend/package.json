@@ -24,7 +24,6 @@
     "sequelize:migrate:undo": "sequelize-cli db:migrate:undo",
     "sequelize:seed": "sequelize-cli db:seed:all",
     "sequelize:seed:undo": "sequelize-cli db:seed:undo:all",
-    "kb:eval-extraction": "ts-node -r dotenv/config scripts/kb-eval-extraction.ts dotenv_config_path=../../.env",
     "dev:kill-port": "lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true"
   },
   "dependencies": {
@@ -37,7 +36,7 @@
     "@nestjs/websockets": "^11.0.1",
     "bullmq": "^6.0.2",
     "dotenv": "^17.4.2",
-    "googleapis": "^173.0.0",
+    "express": "^5.2.1",
     "ioredis": "^5.11.1",
     "pg": "^8.22.0",
     "pg-hstore": "^2.3.4",

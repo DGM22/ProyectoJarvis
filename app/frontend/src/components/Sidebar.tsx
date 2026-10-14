@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Settings, Bot, FileAudio } from 'lucide-react';
+import { Home, Settings, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { JarvisGraphOrb, type OrbState } from '@/components/JarvisGraphOrb';
 import { useVoiceSession } from '@/providers/VoiceSessionProvider';
@@ -8,7 +8,6 @@ import type { VoiceChatStatus } from '@/types/realtime';
 const NAV_ITEMS = [
   { to: '/', label: 'Inicio', icon: Home },
   { to: '/agents', label: 'Agentes', icon: Bot },
-  { to: '/transcripciones', label: 'Transcripciones', icon: FileAudio },
   { to: '/config', label: 'Configuración', icon: Settings },
 ] as const;
 

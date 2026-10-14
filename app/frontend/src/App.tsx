@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AppShell } from '@/layouts/AppShell';
 import { HomePage } from '@/pages/HomePage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { AgentsPage } from '@/pages/AgentsPage';
-import { TranscriptsPage } from '@/pages/TranscriptsPage';
-import { SessionPage } from '@/pages/SessionPage';
-import { SessionNavigator } from '@/components/SessionNavigator';
+import { IncomingDoorbellCall } from '@/components/IncomingDoorbellCall';
+import { DoorbellSlotProvider } from '@/providers/DoorbellSlotProvider';
 import { VoiceSessionProvider } from '@/providers/VoiceSessionProvider';
 
 function App() {
@@ -14,16 +13,21 @@ function App() {
     // "Hey Jarvis" sobreviven a cualquier cambio de ruta.
     <VoiceSessionProvider>
       <BrowserRouter>
-        <SessionNavigator />
-        <Routes>
-          <Route path="session" element={<SessionPage />} />
-          <Route element={<AppShell />}>
-            <Route index element={<HomePage />} />
-            <Route path="agents" element={<AgentsPage />} />
-            <Route path="transcripciones" element={<TranscriptsPage />} />
-            <Route path="config" element={<ConfigPage />} />
-          </Route>
-        </Routes>
+        <DoorbellSlotProvider>
+          {/* Fuera de las rutas: el timbre suena en cualquier página. En el
+              celular abre a pantalla completa; en la computadora se dibuja en
+              la página inicial. */}
+          <IncomingDoorbellCall />
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route index element={<HomePage />} />
+              <Route path="agents" element={<AgentsPage />} />
+              <Route path="config" element={<ConfigPage />} />
+            </Route>
+            {/* La vista de chat se quitó: las llamadas viven en el inicio. */}
+            <Route path="session" element={<Navigate to="/" replace />} />
+          </Routes>
+        </DoorbellSlotProvider>
       </BrowserRouter>
     </VoiceSessionProvider>
   );
