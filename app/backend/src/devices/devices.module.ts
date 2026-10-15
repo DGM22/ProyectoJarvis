@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { RealtimeModule } from '../realtime/realtime.module';
-import { CameraHubService } from './camera-hub.service';
+import { CameraHubModule } from './camera-hub.module';
 import { CameraGateway } from './camera.gateway';
 import { CameraViewGateway } from './camera-view.gateway';
 import { DevicesController } from './devices.controller';
@@ -14,13 +14,16 @@ import { Device } from './models/device.model';
  * Dispositivos físicos Jarvis (ESP32): voz en `/devices`, JPEG en `/camera`.
  */
 @Module({
-  imports: [SequelizeModule.forFeature([Device]), RealtimeModule],
+  imports: [
+    SequelizeModule.forFeature([Device]),
+    RealtimeModule,
+    CameraHubModule,
+  ],
   controllers: [DevicesController],
   providers: [
     DevicesService,
     DevicesRegistryService,
     DevicesGateway,
-    CameraHubService,
     CameraGateway,
     CameraViewGateway,
   ],
@@ -28,7 +31,7 @@ import { Device } from './models/device.model';
     DevicesService,
     DevicesRegistryService,
     DevicesGateway,
-    CameraHubService,
+    CameraHubModule,
   ],
 })
 export class DevicesModule {}

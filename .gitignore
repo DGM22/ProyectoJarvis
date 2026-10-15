@@ -49,6 +49,10 @@ firmware/**/sdkconfig.old
 firmware/**/sdkconfig.local
 firmware/**/managed_components/
 
+# Fotos de caras para probar la verificación facial (datos biométricos)
+app/backend/testAWS/
+**/face-compare-frame.jpg
+
 # Cámara Freenove (WiFi + token)
 esp32-camera/src/secrets.h
 esp32-camera/.pio/

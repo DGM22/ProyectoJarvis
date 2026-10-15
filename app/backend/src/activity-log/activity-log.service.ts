@@ -93,9 +93,7 @@ export class ActivityLogService {
       return '';
     }
 
-    const lines = entries
-      .reverse()
-      .map((e) => `- [${e.status}] ${e.summary}`);
+    const lines = entries.reverse().map((e) => `- [${e.status}] ${e.summary}`);
 
     return `Recent actions you performed:\n${lines.join('\n')}`;
   }
@@ -142,6 +140,11 @@ export class ActivityLogService {
       case 'kb_disputed_fact':
         return `Detectaste una posible contradicción en "${s(args.subject)}"`;
 
+      case 'verify_owner_face':
+        return r.status === 'match'
+          ? `Verificación facial en la puerta: coincide con ${s(r.ownerName)} (${s(r.similarity)}%)`
+          : `Verificación facial en la puerta sin coincidencia (${s(r.status)}${r.similarity != null ? `, ${s(r.similarity)}%` : ''})`;
+
       default:
         return `Ejecutaste ${toolName}`;
     }
@@ -167,4 +170,5 @@ const TOOL_LABELS: Record<string, string> = {
   kb_search: 'buscar en knowledge base',
   kb_save_fact: 'guardar hecho',
   kb_disputed_fact: 'registrar disputa de hecho',
+  verify_owner_face: 'verificar la cara del dueño',
 };

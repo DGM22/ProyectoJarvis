@@ -66,5 +66,11 @@ export default () => ({
   redis: {
     url: process.env.REDIS_URL ?? 'redis://localhost:6379',
   },
+  aws: {
+    // Sin región la verificación facial queda deshabilitada. Las credenciales
+    // las resuelve el SDK (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY o rol IAM).
+    region: process.env.AWS_REGION ?? '',
+    faceMatchThreshold: parseFloat(process.env.FACE_MATCH_THRESHOLD ?? '90'),
+  },
   monorepoRoot: join(__dirname, '../../../..'),
 });
