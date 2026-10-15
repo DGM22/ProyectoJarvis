@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { WsAdapter } from '@nestjs/platform-ws';
-import { json, text } from 'express';
+import { json, raw, text } from 'express';
 import { AppModule } from './app.module';
+import { FACE_PHOTO_MAX_BYTES } from './household/household.service';
 
 /**
  * Arranca la aplicación Nest.
@@ -23,11 +24,16 @@ async function bootstrap() {
   app.useWebSocketAdapter(new WsAdapter(app));
 
   app.use('/realtime/calls', text({ type: ['application/sdp', 'text/plain'] }));
+  // Fotos de referencia para la verificación facial (cuerpo = imagen cruda).
+  app.use(
+    '/household',
+    raw({ type: ['image/jpeg', 'image/png'], limit: FACE_PHOTO_MAX_BYTES }),
+  );
   app.use(json());
 
   app.enableCors({
     origin: frontendOrigin,
-    methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 

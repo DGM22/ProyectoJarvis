@@ -39,6 +39,16 @@ export class HouseholdMember extends Model {
   @Column({ type: DataType.TEXT, allowNull: true })
   declare notes: string | null;
 
+  /** Foto de referencia para la verificación facial del timbre. */
+  @Column({ type: DataType.BLOB, allowNull: true })
+  declare facePhoto: Buffer | null;
+
+  @Column({ type: DataType.STRING(32), allowNull: true })
+  declare facePhotoMime: string | null;
+
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare facePhotoUpdatedAt: Date | null;
+
   @CreatedAt
   @Column({ type: DataType.DATE, allowNull: false })
   declare createdAt: Date;

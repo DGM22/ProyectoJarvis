@@ -27,6 +27,7 @@
     "dev:kill-port": "lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true"
   },
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1152.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
