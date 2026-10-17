@@ -43,6 +43,7 @@ static constexpr uint32_t CALL_FRAME_GAP_MS = 160;
 
 /** Botón a GND (pull-up interno). */
 #define BUTTON_PIN 14
+#define LED_PIN 2
 
 static constexpr int kReservedPins[] = {
     XCLK_GPIO_NUM, SIOD_GPIO_NUM, SIOC_GPIO_NUM, Y2_GPIO_NUM,   Y3_GPIO_NUM,
@@ -62,6 +63,8 @@ static constexpr bool isReservedPin(int pin, size_t i = 0)
 
 static_assert(!isReservedPin(BUTTON_PIN), "BUTTON_PIN choca con la cámara, la OLED o el audio");
 static constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
+static_assert(!isReservedPin(LED_PIN), "LED_PIN choca con la cámara, la OLED o el audio");
+static constexpr uint32_t LED_ON_MS = 30000;
 
 static WebSocketsClient webSocket;
 static volatile bool wsConnected = false;
@@ -70,6 +73,25 @@ static bool cameraReady = false;
 static bool ntpDone = false;
 static bool backendStarted = false;
 static bool audioReady = false;
+static bool ledOn = false;
+static uint32_t ledOnSinceMs = 0;
+
+static void turnLedOn()
+{
+    digitalWrite(LED_PIN, HIGH);
+    ledOn = true;
+    ledOnSinceMs = millis();
+    Serial.println("led.on");
+}
+
+static void updateLed()
+{
+    if (ledOn && millis() - ledOnSinceMs >= LED_ON_MS) {
+        digitalWrite(LED_PIN, LOW);
+        ledOn = false;
+        Serial.println("led.off");
+    }
+}
 
 static void sendHello()
 {
@@ -79,6 +101,10 @@ static void sendHello()
 
 static void handleServerText(const char *json)
 {
+    if (strstr(json, "led.on") != nullptr) {
+        turnLedOn();
+        return;
+    }
     if (strstr(json, "stream.on") != nullptr) {
         streamEnabled = true;
         Serial.println("stream.on");
@@ -420,6 +446,8 @@ void setup()
     esp_log_level_set("cam_hal", ESP_LOG_NONE);
 
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
     robotEyesBegin(OLED_SDA_PIN, OLED_SCL_PIN);
     cameraReady = initCamera();
     audioReady = voiceBegin();
@@ -463,6 +491,7 @@ void loop()
     }
 
     pollButton();
+    updateLed();
 
     if (!wsConnected) {
         robotEyesSetMood(EyesMood::Connecting);

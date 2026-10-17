@@ -199,6 +199,13 @@ export class CameraHubService {
     }
   }
 
+  turnOnLed() {
+    for (const entry of this.cameras.values()) {
+      this.sendToCamera(entry.socket, { type: 'led.on' });
+    }
+    this.logger.log(`Entrance LED on (${this.cameras.size} cams)`);
+  }
+
   /** Encendido mientras haya viewers, margen de apagado o capturas en curso. */
   private isStreaming(): boolean {
     return (

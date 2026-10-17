@@ -47,7 +47,7 @@ function setup(options: {
   );
   const service = new FaceVerificationService(
     comparer,
-    { captureFrame } as unknown as CameraHubService,
+    { captureFrame, turnOnLed: jest.fn() } as unknown as CameraHubService,
     { listOwnerFacePhotos } as unknown as HouseholdService,
     { get: () => options.threshold ?? 90 } as unknown as ConfigService,
   );

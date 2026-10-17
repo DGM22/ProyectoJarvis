@@ -100,6 +100,7 @@ export class FaceVerificationService {
     if (!best) {
       return { status: 'no_face', threshold, ...captured };
     }
+    this.cameraHub.turnOnLed();
     const similarity = Math.round(best.similarity * 10) / 10;
     if (best.similarity >= threshold) {
       this.logger.log(
