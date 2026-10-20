@@ -20,6 +20,11 @@ export interface ToolExecutionContext {
   mode: SessionMode;
   /** Consulta del timbre asociada a una llamada web en modo `security`. */
   consultId?: string;
+  /**
+   * Solo en el timbre físico: manda al ESP32 mover el servo de la puerta.
+   * Devuelve `false` si el dispositivo ya no está en la llamada.
+   */
+  openDoor?: (holdMs: number) => boolean;
 }
 
 /**

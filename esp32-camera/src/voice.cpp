@@ -1,6 +1,8 @@
 #include "voice.h"
 
 #include <Arduino.h>
+#include <stdlib.h>
+#include "door.h"
 #include <WebSocketsClient.h>
 #include <freertos/stream_buffer.h>
 #include <math.h>
@@ -585,6 +587,10 @@ static void handleText(const char *json)
     } else if (isType(json, "intercom.end")) {
         intercomMode = false;
         Serial.println("voz: interfon terminado, regresa la IA");
+    } else if (isType(json, "door.open")) {
+        // {"type":"door.open","holdMs":5000}: el dueño pasó la verificación facial.
+        const char *hold = strstr(json, "\"holdMs\":");
+        doorOpen(hold ? (uint32_t)strtoul(hold + 9, nullptr, 10) : 0);
     } else if (isType(json, "inbound.start")) {
         sessionRequestMs = millis();
         setState(VoiceState::Requesting, "inbound.start");
@@ -615,8 +621,8 @@ static void onVoiceEvent(WStype_t type, uint8_t *payload, size_t length)
     case WStype_CONNECTED:
         wsConnected = true;
         Serial.printf("voz: WS conectado (%.*s)\n", (int)length, (const char *)payload);
-        voiceWs.sendTXT("{\"type\":\"hello\",\"firmwareVersion\":\"0.7.0-cam\","
-                        "\"capabilities\":[\"audio\"]}");
+        voiceWs.sendTXT("{\"type\":\"hello\",\"firmwareVersion\":\"0.8.0-cam\","
+                        "\"capabilities\":[\"audio\",\"door\"]}");
         break;
     case WStype_TEXT: {
         char buf[384];

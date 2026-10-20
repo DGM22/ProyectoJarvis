@@ -77,5 +77,9 @@ export default () => ({
     region: process.env.AWS_REGION ?? '',
     faceMatchThreshold: parseFloat(process.env.FACE_MATCH_THRESHOLD ?? '90'),
   },
+  door: {
+    // Cuánto tiempo se queda abierto el servo tras verificar al dueño.
+    openMs: parseInt(process.env.DOOR_OPEN_MS ?? '5000', 10),
+  },
   monorepoRoot: join(__dirname, '../../../..'),
 });

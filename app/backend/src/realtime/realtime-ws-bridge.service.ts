@@ -22,12 +22,14 @@ export interface DeviceBridgeCallbacks {
   onSessionReady: () => void;
   onSessionEnd: (reason: string) => void;
   onError: (message: string) => void;
-  /** Mensajes de control extra hacia el ESP32 (modo interfón). */
+  /** Mensajes de control extra hacia el ESP32 (modo interfón, abrir puerta). */
   onControl?: (message: DeviceControlMessage) => void;
 }
 
 export type DeviceControlMessage =
-  { type: 'intercom.start' } | { type: 'intercom.end' };
+  | { type: 'intercom.start' }
+  | { type: 'intercom.end' }
+  | { type: 'door.open'; holdMs: number };
 
 export type DeviceDisplayState =
   'idle' | 'connecting' | 'listening' | 'speaking' | 'error';
@@ -839,6 +841,15 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         args = {};
       }
 
+      const openDoor = (holdMs: number): boolean => {
+        if (bridge.closed || !bridge.callbacks.onControl) {
+          return false;
+        }
+        bridge.callbacks.onControl({ type: 'door.open', holdMs });
+        this.logger.log(`Doorbell ${deviceKey} door open (${holdMs} ms)`);
+        return true;
+      };
+
       let toolOutput: unknown;
       const toolStartedAt = Date.now();
       try {
@@ -846,6 +857,7 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
           channel: 'device',
           sessionKey: deviceKey,
           mode: bridge.mode,
+          openDoor,
         });
       } catch (error) {
         toolOutput = {

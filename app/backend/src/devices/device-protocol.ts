@@ -65,6 +65,11 @@ export type ServerToDeviceMessage =
       type: 'intercom.end';
     }
   | {
+      /** El dueño pasó la verificación facial: el servo abre y cierra la puerta. */
+      type: 'door.open';
+      holdMs: number;
+    }
+  | {
       type: 'error';
       message: string;
     };

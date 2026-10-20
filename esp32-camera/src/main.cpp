@@ -8,6 +8,7 @@
 #include "robot_eyes.h"
 #include "secrets.h"
 #include "voice.h"
+#include "door.h"
 
 /** Token del socket de voz; por defecto el mismo de la cámara. */
 #ifndef JARVIS_VOICE_TOKEN
@@ -61,6 +62,17 @@ static constexpr bool isReservedPin(int pin, size_t i = 0)
 }
 
 static_assert(!isReservedPin(BUTTON_PIN), "BUTTON_PIN choca con la cámara, la OLED o el audio");
+
+/**
+ * Señal del servo de la puerta (cable naranja/amarillo). Alimenta el servo con
+ * 5 V aparte y une su GND con el de la placa.
+ *
+ * GPIO19 es D- del USB nativo: sube y monitorea por el puerto UART (COM), no
+ * por el USB nativo, o se pierde el serial al iniciar el servo.
+ */
+#define DOOR_SERVO_PIN 19
+static_assert(!isReservedPin(DOOR_SERVO_PIN) && DOOR_SERVO_PIN != BUTTON_PIN,
+              "DOOR_SERVO_PIN choca con la cámara, la OLED, el audio o el botón");
 static constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
 
 static WebSocketsClient webSocket;
@@ -423,6 +435,7 @@ void setup()
     robotEyesBegin(OLED_SDA_PIN, OLED_SCL_PIN);
     cameraReady = initCamera();
     audioReady = voiceBegin();
+    doorBegin(DOOR_SERVO_PIN);
     startWifi();
 }
 
@@ -463,6 +476,7 @@ void loop()
     }
 
     pollButton();
+    doorLoop();
 
     if (!wsConnected) {
         robotEyesSetMood(EyesMood::Connecting);

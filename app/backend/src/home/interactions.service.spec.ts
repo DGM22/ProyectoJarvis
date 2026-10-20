@@ -35,6 +35,8 @@ function setup() {
     notificationModel as never,
     recognitionModel as never,
     errorModel as never,
+    {} as never,
+    {} as never,
     sequelize as never,
   );
   service.onModuleInit();

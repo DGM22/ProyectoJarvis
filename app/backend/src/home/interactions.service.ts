@@ -5,6 +5,8 @@ import { Sequelize } from 'sequelize-typescript';
 import { ConsultService } from '../consult/consult.service';
 import type { ConsultEvent } from '../consult/consult.types';
 import { HomeService } from './home.service';
+import { Access } from './models/access.model';
+import { ActuatorActivation } from './models/actuator-activation.model';
 import { Actuator } from './models/actuator.model';
 import { AiResponse } from './models/ai-response.model';
 import { Interaction } from './models/interaction.model';
@@ -79,6 +81,9 @@ export class InteractionsService implements OnModuleInit {
     private readonly notificationModel: typeof OwnerNotification,
     @InjectModel(Recognition) private readonly recognitionModel: typeof Recognition,
     @InjectModel(PipelineError) private readonly errorModel: typeof PipelineError,
+    @InjectModel(Access) private readonly accessModel: typeof Access,
+    @InjectModel(ActuatorActivation)
+    private readonly activationModel: typeof ActuatorActivation,
     @InjectConnection() private readonly sequelize: Sequelize,
   ) {}
 
@@ -186,6 +191,40 @@ export class InteractionsService implements OnModuleInit {
           result.confidence === null ? null : Math.min(1, Math.max(0, result.confidence)).toFixed(3),
       }),
     );
+  }
+
+  /** El servo abrió la puerta para el dueño verificado: acceso + activación. */
+  async recordDoorOpened(
+    sessionKey: string,
+    personId: number | null,
+    holdMs: number,
+  ): Promise<void> {
+    const visit = this.live.get(sessionKey);
+    if (!visit) return;
+    await this.safely('record door opened', async () => {
+      const [servo] = await this.actuatorModel.findOrCreate({
+        where: { deviceId: visit.deviceId, type: 'servo' },
+        defaults: {
+          deviceId: visit.deviceId,
+          type: 'servo',
+          pairedSensorId: null,
+        },
+      });
+      const startedAt = new Date();
+      await this.activationModel.create({
+        actuatorId: servo.id,
+        interactionId: visit.interactionId,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + holdMs),
+      });
+      await this.accessModel.create({
+        interactionId: visit.interactionId,
+        personId,
+        secondsOpen: Math.round(holdMs / 1000),
+        accessGranted: true,
+        completed: true,
+      });
+    });
   }
 
   /**

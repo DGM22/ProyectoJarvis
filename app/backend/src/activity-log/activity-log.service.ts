@@ -142,7 +142,7 @@ export class ActivityLogService {
 
       case 'verify_owner_face':
         return r.status === 'match'
-          ? `Verificación facial en la puerta: coincide con ${s(r.ownerName)} (${s(r.similarity)}%)`
+          ? `Verificación facial en la puerta: coincide con ${s(r.ownerName)} (${s(r.similarity)}%)${r.doorOpened ? ' · puerta abierta' : ''}`
           : `Verificación facial en la puerta sin coincidencia (${s(r.status)}${r.similarity != null ? `, ${s(r.similarity)}%` : ''})`;
 
       default:

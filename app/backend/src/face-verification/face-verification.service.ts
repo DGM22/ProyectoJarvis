@@ -34,8 +34,8 @@ const ATTEMPT_WINDOW_MS = 15 * 60_000;
  * Verifica si quien está en la puerta es el dueño: toma una foto con la
  * cámara y la compara contra las fotos de referencia de los dueños.
  *
- * No hay prueba de vida: una foto impresa podría pasar. El resultado sirve
- * para ajustar la conversación, no para abrir la puerta.
+ * Con `match` IdentitySkill abre la puerta (servo del ESP32). No hay prueba
+ * de vida: una foto impresa del dueño podría pasar.
  */
 @Injectable()
 export class FaceVerificationService {

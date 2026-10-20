@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InteractionsService } from '../../home/interactions.service';
 import {
   FaceVerificationService,
@@ -13,7 +14,7 @@ import type {
 /** Qué debe hacer el agente del timbre con cada resultado. */
 const GUIDANCE: Record<OwnerVerificationResult['status'], string> = {
   match:
-    'La cara coincide con la foto del dueño. Salúdalo por su nombre y atiéndelo como el dueño (puedes tomar sus recados o instrucciones). La verificación facial no es prueba absoluta: no abras la puerta ni digas si hay alguien en casa.',
+    'La cara coincide con la foto del dueño. Salúdalo por su nombre y atiéndelo como el dueño (puedes tomar sus recados o instrucciones). No digas si hay alguien en casa.',
   no_match:
     'La cara NO coincide con la foto del dueño. No lo trates como el dueño ni le des información de la casa. Dile con amabilidad que no pudiste confirmar su identidad y llama call_owner explicando que alguien dice ser el dueño y la verificación facial no coincidió.',
   no_face:
@@ -28,17 +29,25 @@ const GUIDANCE: Record<OwnerVerificationResult['status'], string> = {
     'La verificación facial no está disponible ahora. Trátalo como visitante y llama call_owner explicando que dice ser el dueño.',
 };
 
+const DOOR_OPENED_GUIDANCE =
+  ' La puerta se está abriendo: díselo en una frase corta ("Bienvenido, le abro la puerta").';
+const DOOR_NOT_OPENED_GUIDANCE =
+  ' No se pudo abrir la puerta automáticamente: díselo con amabilidad.';
+
 /**
  * Identidad en la puerta: cuando alguien dice ser el dueño, se toma una foto
  * con la cámara y se compara con la foto de referencia (AWS Rekognition).
+ * Si coincide, el ESP32 mueve el servo para abrir la puerta.
  */
 @Injectable()
 export class IdentitySkill implements Skill {
   readonly name = 'identity';
+  private readonly logger = new Logger(IdentitySkill.name);
 
   constructor(
     private readonly faceVerification: FaceVerificationService,
     private readonly interactions: InteractionsService,
+    private readonly configService: ConfigService,
   ) {}
 
   getTools(): RealtimeFunctionTool[] {
@@ -88,13 +97,42 @@ export class IdentitySkill implements Skill {
         confidence: typeof result.similarity === 'number' ? result.similarity / 100 : null,
       });
     }
+
+    let guidance = GUIDANCE[result.status];
+    let doorOpened = false;
+    if (result.status === 'match') {
+      const holdMs = this.doorOpenMs();
+      doorOpened = context.openDoor?.(holdMs) ?? false;
+      if (doorOpened) {
+        await this.interactions.recordDoorOpened(
+          context.sessionKey,
+          result.ownerPersonId ?? null,
+          holdMs,
+        );
+        guidance += DOOR_OPENED_GUIDANCE;
+      } else {
+        this.logger.warn(
+          `Owner verified but door could not open (${context.sessionKey})`,
+        );
+        guidance += DOOR_NOT_OPENED_GUIDANCE;
+      }
+    }
+
     return {
       ...result,
       claimedName:
         typeof args.claimed_name === 'string' && args.claimed_name.trim()
           ? args.claimed_name.trim()
           : null,
-      guidance: GUIDANCE[result.status],
+      doorOpened,
+      guidance,
     };
+  }
+
+  private doorOpenMs(): number {
+    const value = this.configService.get<number>('door.openMs');
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? value
+      : 5000;
   }
 }
