@@ -6,6 +6,7 @@ import {
 } from '@nestjs/websockets';
 import type { IncomingMessage } from 'http';
 import WebSocket from 'ws';
+import { AuthService } from '../auth/auth.service';
 import { ConsultService } from './consult.service';
 import type { IntercomState, OwnerIntercomLink } from './consult.types';
 import { OwnerVoiceGate, type GateMode } from './owner-voice-gate';
@@ -39,9 +40,18 @@ export class IntercomGateway
   private readonly logger = new Logger(IntercomGateway.name);
   private readonly sessions = new Map<WebSocket, IntercomSession>();
 
-  constructor(private readonly consultService: ConsultService) {}
+  constructor(
+    private readonly consultService: ConsultService,
+    private readonly authService: AuthService,
+  ) {}
 
-  handleConnection(client: WebSocket, req: IncomingMessage): void {
+  async handleConnection(client: WebSocket, req: IncomingMessage): Promise<void> {
+    // Hablar por la bocina de la puerta exige sesión, además del candado de
+    // la consulta (que haya pedido el interfón).
+    if (!(await this.authService.userFromRequest(req))) {
+      client.close(4401, 'Unauthorized');
+      return;
+    }
     const consultId = this.extractConsultId(req);
     // Voz del visitante → dueño: sin siseo ni ráfagas de ruido del mic.
     const visitorGate = new VisitorNoiseGate((report) =>

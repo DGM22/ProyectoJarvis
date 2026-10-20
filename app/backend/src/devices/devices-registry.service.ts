@@ -69,6 +69,16 @@ export class DevicesRegistryService {
     return true;
   }
 
+  /** Audio PCM crudo hacia la bocina del dispositivo. */
+  sendBinary(deviceId: number, data: Buffer): boolean {
+    const entry = this.byDeviceId.get(deviceId);
+    if (!entry || entry.socket.readyState !== entry.socket.OPEN) {
+      return false;
+    }
+    entry.socket.send(data, { binary: true });
+    return true;
+  }
+
   onlineDeviceIds(): number[] {
     return [...this.byDeviceId.keys()].filter((id) => this.isOnline(id));
   }

@@ -1,0 +1,90 @@
+erDiagram
+    homes {
+        int id PK
+        varchar name
+        text address
+        timestamptz created_at
+    }
+    household_members {
+        int id PK
+        int home_id FK
+        varchar name
+        varchar role
+        timestamptz created_at
+    }
+    face_photos {
+        int id PK
+        int member_id FK
+        bytea photo
+        timestamptz uploaded_at
+    }
+    users {
+        int id PK
+        int member_id FK
+        varchar email
+        varchar password_hash
+        timestamptz created_at
+    }
+    devices {
+        int id PK
+        int home_id FK
+        varchar name
+        varchar type
+        char token_hash
+        varchar status
+    }
+    member_devices {
+        int member_id PK
+        int device_id PK
+        boolean can_open_door
+    }
+    sensors {
+        int id PK
+        int device_id FK
+        varchar type
+        varchar location
+    }
+    sensor_events {
+        bigint id PK
+        int sensor_id FK
+        numeric value
+        timestamptz recorded_at
+    }
+    interactions {
+        int id PK
+        int device_id FK
+        int member_id FK
+        varchar type
+        varchar status
+        timestamptz started_at
+        timestamptz ended_at
+    }
+    messages {
+        bigint id PK
+        int interaction_id FK
+        varchar sender
+        text content
+        timestamptz created_at
+    }
+    flags {
+        int id PK
+        int interaction_id FK
+        bigint sensor_event_id FK
+        varchar type
+        varchar status
+        timestamptz created_at
+    }
+
+    homes ||--o{ household_members : "tiene"
+    homes ||--o{ devices : "tiene"
+    household_members ||--o| face_photos : "foto"
+    household_members ||--o| users : "cuenta"
+    household_members ||--o{ member_devices : "accede"
+    devices ||--o{ member_devices : "acceso"
+    devices ||--o{ sensors : "tiene"
+    sensors ||--o{ sensor_events : "reporta"
+    devices ||--o{ interactions : "recibe"
+    household_members |o--o{ interactions : "reconocido en"
+    interactions ||--o{ messages : "contiene"
+    interactions |o--o{ flags : "genera"
+    sensor_events |o--o{ flags : "genera"

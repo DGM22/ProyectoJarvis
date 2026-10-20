@@ -6,6 +6,7 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import type WebSocket from 'ws';
+import { AuthService } from '../auth/auth.service';
 import type { IncomingMessage } from 'http';
 import { WakeWordBridgeService } from './wake-word-bridge.service';
 
@@ -28,6 +29,7 @@ export class WakeWordGateway
   constructor(
     private readonly bridgeService: WakeWordBridgeService,
     private readonly configService: ConfigService,
+    private readonly authService: AuthService,
   ) {}
 
   /**
@@ -36,18 +38,16 @@ export class WakeWordGateway
    * @param client Socket del navegador.
    * @param req Petición de upgrade, usada para leer el token de la query.
    */
-  handleConnection(client: WebSocket, req: IncomingMessage): void {
-    // El token solo se exige cuando está configurado, para no romper el flujo
-    // de desarrollo local contra localhost.
+  async handleConnection(client: WebSocket, req: IncomingMessage): Promise<void> {
+    // El navegador entra con su sesión; otros clientes (p. ej. una placa) con
+    // el token de WAKEWORD_WS_TOKEN si está configurado.
     const token = this.configService.get<string>('wakeword.wsToken');
-    if (token) {
-      const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
-      const provided = url.searchParams.get('token');
-      if (provided !== token) {
-        this.logger.warn('Rejected connection: invalid token');
-        client.close(4401, 'Unauthorized');
-        return;
-      }
+    const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+    const tokenOk = Boolean(token) && url.searchParams.get('token') === token;
+    if (!tokenOk && !(await this.authService.userFromRequest(req))) {
+      this.logger.warn('Rejected connection: no session / invalid token');
+      client.close(4401, 'Unauthorized');
+      return;
     }
 
     const clientId = `ww-${++connectionCounter}`;

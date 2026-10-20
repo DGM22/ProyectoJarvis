@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { ForeignKeyConstraintError } from 'sequelize';
+import { HomeService } from '../home/home.service';
 import { Device, type DeviceStatus } from './models/device.model';
 
 export type DevicePublicDto = {
@@ -27,11 +29,13 @@ export class DevicesService {
   constructor(
     @InjectModel(Device)
     private readonly deviceModel: typeof Device,
+    private readonly homeService: HomeService,
   ) {}
 
   /** Lista todos los dispositivos (estado de DB; `online` lo enriquece el registry). */
   async list(): Promise<Device[]> {
-    return this.deviceModel.findAll({ order: [['id', 'ASC']] });
+    // Los archivados (borrados con historial) ya no se muestran.
+    return this.deviceModel.findAll({ where: { active: true }, order: [['id', 'ASC']] });
   }
 
   async findById(id: number): Promise<Device> {
@@ -57,6 +61,8 @@ export class DevicesService {
       firmwareVersion: null,
       lastSeenAt: null,
     });
+    // Botón, cámara, mic, contacto de puerta y bocina para registrar eventos.
+    await this.homeService.ensureDeviceDefaults(device.id);
     return { device, token };
   }
 
@@ -74,9 +80,29 @@ export class DevicesService {
     return { device, token };
   }
 
-  async delete(id: number): Promise<void> {
+  /**
+   * Borra el dispositivo; si ya tiene historial de visitas (la BD lo protege
+   * con RESTRICT) se **archiva**: deja de mostrarse y de poder conectarse,
+   * pero sus visitas se conservan.
+   *
+   * @returns `archived` cuando no se pudo borrar por el historial.
+   */
+  async delete(id: number): Promise<{ archived: boolean }> {
     const device = await this.findById(id);
-    await device.destroy();
+    try {
+      await device.destroy();
+      return { archived: false };
+    } catch (error) {
+      if (!(error instanceof ForeignKeyConstraintError)) {
+        throw error;
+      }
+      device.active = false;
+      device.status = 'offline';
+      // Token inservible: el hash de un valor aleatorio que nadie conoce.
+      device.tokenHash = this.hashToken(randomBytes(32).toString('hex'));
+      await device.save();
+      return { archived: true };
+    }
   }
 
   /**
@@ -89,7 +115,7 @@ export class DevicesService {
       return null;
     }
     const hash = this.hashToken(token.trim());
-    return this.deviceModel.findOne({ where: { tokenHash: hash } });
+    return this.deviceModel.findOne({ where: { tokenHash: hash, active: true } });
   }
 
   async markStatus(

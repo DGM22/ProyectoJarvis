@@ -16,6 +16,7 @@ import {
 const ROLE_LABEL: Record<HouseholdRole, string> = {
   owner: 'Dueño',
   resident: 'Residente',
+  guest: 'Invitado',
 };
 
 /**
@@ -228,6 +229,7 @@ export function HouseholdPanel({ disabled = false }: { disabled?: boolean }) {
             className="rounded-lg border border-border bg-overlay px-3 py-2 text-sm text-text-hi outline-none focus:border-accent-400"
           >
             <option value="resident">Residente</option>
+            <option value="guest">Invitado</option>
             <option value="owner">Dueño</option>
           </select>
         </div>

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { ConsultModule } from '../consult/consult.module';
+import { HomeModule } from '../home/home.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { CameraHubModule } from './camera-hub.module';
 import { CameraGateway } from './camera.gateway';
@@ -8,6 +10,8 @@ import { DevicesController } from './devices.controller';
 import { DevicesGateway } from './devices.gateway';
 import { DevicesRegistryService } from './devices-registry.service';
 import { DevicesService } from './devices.service';
+import { LiveGateway } from './live.gateway';
+import { LiveSessionService } from './live-session.service';
 import { Device } from './models/device.model';
 
 /**
@@ -16,6 +20,8 @@ import { Device } from './models/device.model';
 @Module({
   imports: [
     SequelizeModule.forFeature([Device]),
+    HomeModule,
+    ConsultModule,
     RealtimeModule,
     CameraHubModule,
   ],
@@ -26,6 +32,8 @@ import { Device } from './models/device.model';
     DevicesGateway,
     CameraGateway,
     CameraViewGateway,
+    LiveSessionService,
+    LiveGateway,
   ],
   exports: [
     DevicesService,

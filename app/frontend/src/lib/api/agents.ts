@@ -1,4 +1,4 @@
-import { API_BASE_URL, jsonRequest, parseJson } from './http';
+import { API_BASE_URL, jsonRequest, parseJson, apiFetch } from './http';
 
 export type AgentDto = {
   id: number;
@@ -11,7 +11,7 @@ export type AgentDto = {
 };
 
 export async function listAgents(): Promise<AgentDto[]> {
-  return parseJson(await fetch(`${API_BASE_URL}/agents`));
+  return parseJson(await apiFetch(`${API_BASE_URL}/agents`));
 }
 
 export async function updateAgent(
@@ -19,12 +19,12 @@ export async function updateAgent(
   input: Partial<Pick<AgentDto, 'name' | 'purpose' | 'systemPrompt' | 'status'>>,
 ): Promise<AgentDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/agents/${slug}`, jsonRequest('PATCH', input)),
+    await apiFetch(`${API_BASE_URL}/agents/${slug}`, jsonRequest('PATCH', input)),
   );
 }
 
 export async function resetAgent(slug: string): Promise<AgentDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/agents/${slug}/reset`, { method: 'POST' }),
+    await apiFetch(`${API_BASE_URL}/agents/${slug}/reset`, { method: 'POST' }),
   );
 }

@@ -37,6 +37,14 @@ export type BridgeStartOptions = {
   voice?: string;
   /** Prompt extra para llamadas proactivas (app o alertas futuras). */
   inboundPrompt?: string;
+  /** Modo de atención del timbre (solo `reason: 'button'`). */
+  attention?: {
+    /** Suena primero en la app; la IA habla cuando se acabe el tiempo o contestes. */
+    ringFirst: boolean;
+    ringMs: number;
+    /** `false` = no molestar: sin `call_owner`. */
+    ownerAvailable: boolean;
+  };
 };
 
 interface RealtimeFunctionCallItem {
@@ -75,6 +83,20 @@ interface BridgeState {
   /** Diagnóstico del mic de la puerta: se reporta cada `AUDIO_DIAG_MS`. */
   diag: { frames: number; peak: number; speechStarted: number };
   diagTimer: NodeJS.Timeout | null;
+  /** Marcas de tiempo para medir dónde se va la latencia (ver `logFirstAudio`). */
+  /** La IA terminó su saludo: antes de eso no se escucha el mic (ruido inicial). */
+  greetingDone: boolean;
+  /** Modo Ring activo: suena en la app antes de que hable la IA. */
+  ringFirst: { ringMs: number } | null;
+  timing: {
+    startedAt: number;
+    greeted: boolean;
+    speechStoppedAt: number | null;
+    /** Qué disparó la respuesta que se está midiendo. */
+    turnLabel: string;
+    responseCreatedAt: number | null;
+    firstAudioLogged: boolean;
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -83,6 +105,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const DEVICE_PCM_RATE = 16000;
 const OPENAI_PCM_RATE = 24000;
+/** Resumen que ve el dueño cuando el timbre suena antes de que hable la IA. */
+const RING_FIRST_SUMMARY =
+  'Alguien tocó el timbre. Todavía no se ha hablado con el visitante: míralo en la cámara y decide.';
+
 /** Cada cuánto se loguea qué tanto audio del mic llega y qué oyó OpenAI. */
 const AUDIO_DIAG_MS = 5000;
 
@@ -150,6 +176,7 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     }
 
     callbacks.onDisplay('connecting');
+    const startedAt = Date.now();
 
     const voice = this.sessionConfigService.resolveVoice(options.voice);
     const mode: SessionMode =
@@ -177,7 +204,13 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         extraInstructions,
         pcmRateHz: OPENAI_PCM_RATE,
         mode,
+        ownerAvailable: options.attention?.ownerAvailable,
       },
+    );
+
+    this.logger.log(
+      `[latencia] ${deviceKey} config de sesión en ${Date.now() - startedAt} ms ` +
+        `(instrucciones ${sessionConfig.instructions.length} chars, ${sessionConfig.tools.length} tools, modelo ${model})`,
     );
 
     const openaiWs = new WebSocket(
@@ -209,6 +242,18 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       intercomFallback: null,
       diag: { frames: 0, peak: -120, speechStarted: 0 },
       diagTimer: null,
+      greetingDone: false,
+      ringFirst: options.attention?.ringFirst
+        ? { ringMs: options.attention.ringMs }
+        : null,
+      timing: {
+        startedAt,
+        greeted: false,
+        speechStoppedAt: null,
+        turnLabel: 'turno',
+        responseCreatedAt: null,
+        firstAudioLogged: false,
+      },
     };
     this.bridges.set(deviceKey, bridge);
     bridge.diagTimer = setInterval(() => this.logAudioDiag(deviceKey), AUDIO_DIAG_MS);
@@ -237,7 +282,9 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     }
 
     openaiWs.on('open', () => {
-      this.logger.log(`OpenAI Realtime WS open for device ${deviceKey}`);
+      this.logger.log(
+        `OpenAI Realtime WS open for device ${deviceKey} (+${Date.now() - startedAt} ms)`,
+      );
       this.send(openaiWs, {
         type: 'session.update',
         session: sessionConfig,
@@ -280,7 +327,14 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       bridge.intercomSink(pcm16k);
       return;
     }
-    if (bridge.intercomPending || bridge.speaking || bridge.paused) {
+    // En espera del dueño el mic de la puerta queda en mute hasta que llegue
+    // su instrucción: si no, el ruido/visitante se mezcla con la consulta.
+    if (
+      bridge.intercomPending ||
+      bridge.speaking ||
+      bridge.paused ||
+      !bridge.greetingDone
+    ) {
       return;
     }
     if (bridge.openaiWs.readyState !== WebSocket.OPEN) {
@@ -325,8 +379,11 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     bridge.pausePending = false;
     this.logger.log(`Doorbell ${deviceKey} resumed`);
 
-    // Lo que dijo el visitante durante la espera no llegó a OpenAI; se descarta.
+    // El mic estuvo en mute durante la espera: se limpia cualquier resto.
     this.send(bridge.openaiWs, { type: 'input_audio_buffer.clear' });
+    // Esta respuesta la dispara tu decisión, no la voz del visitante.
+    bridge.timing.speechStoppedAt = Date.now();
+    bridge.timing.turnLabel = 'reanudación: instrucción del dueño';
     this.send(bridge.openaiWs, {
       type: 'conversation.item.create',
       item: {
@@ -465,6 +522,33 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     bridge.diag = { frames: 0, peak: -120, speechStarted: 0 };
   }
 
+  /**
+   * Una línea por respuesta: cuánto tardó OpenAI en empezar a hablar desde que
+   * detectó el fin de tu voz (o desde el botón, para el saludo).
+   */
+  private logFirstAudio(deviceKey: string, bridge: BridgeState): void {
+    const now = Date.now();
+    const { timing } = bridge;
+    if (!timing.greeted) {
+      timing.greeted = true;
+      this.logger.log(
+        `[latencia] ${deviceKey} saludo: primer audio a los ${now - timing.startedAt} ms del botón`,
+      );
+      return;
+    }
+    if (timing.speechStoppedAt === null) {
+      return;
+    }
+    const created = timing.responseCreatedAt
+      ? `respuesta creada +${timing.responseCreatedAt - timing.speechStoppedAt} ms, `
+      : '';
+    this.logger.log(
+      `[latencia] ${deviceKey} ${timing.turnLabel} → ${created}primer audio +${now - timing.speechStoppedAt} ms` +
+        (timing.turnLabel.startsWith('turno') ? ' (más ~450 ms de silencio que espera el VAD)' : ''),
+    );
+    timing.speechStoppedAt = null;
+  }
+
   private requestResponse(
     bridge: BridgeState,
     payload: Record<string, unknown>,
@@ -532,7 +616,24 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         return;
       }
       bridge.ready = true;
+      this.logger.log(
+        `[latencia] ${deviceKey} sesión lista en ${Date.now() - bridge.timing.startedAt} ms`,
+      );
       bridge.callbacks.onSessionReady();
+
+      // Modo Ring: primero suena en la app y la IA se queda callada, sin
+      // saludar, hasta que se acabe el tiempo o el dueño decida.
+      if (bridge.mode === 'doorbell' && bridge.ringFirst) {
+        bridge.paused = true;
+        bridge.greetingDone = true;
+        bridge.callbacks.onDisplay('connecting');
+        this.consultService.callOwner(deviceKey, RING_FIRST_SUMMARY, {
+          ringMs: bridge.ringFirst.ringMs,
+          ringFirst: true,
+        });
+        return;
+      }
+
       bridge.callbacks.onDisplay('listening');
       this.requestResponse(bridge, {
         type: 'response.create',
@@ -554,7 +655,15 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
 
     if (type === 'response.created') {
       bridge.responseActive = true;
+      bridge.timing.responseCreatedAt = Date.now();
+      bridge.timing.firstAudioLogged = false;
       return;
+    }
+
+    if (type === 'input_audio_buffer.speech_stopped') {
+      // OpenAI lo manda tras ~500 ms de silencio (server_vad): eso ya es espera.
+      bridge.timing.speechStoppedAt = Date.now();
+      bridge.timing.turnLabel = 'turno: fin de voz';
     }
 
     if (type === 'error') {
@@ -619,6 +728,10 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         bridge.speaking = true;
         bridge.callbacks.onDisplay('speaking');
       }
+      if (!bridge.timing.firstAudioLogged) {
+        bridge.timing.firstAudioLogged = true;
+        this.logFirstAudio(deviceKey, bridge);
+      }
       const pcm24k = base64ToPcm(delta);
       const pcm16k = bridge.downsampler.process(pcm24k);
       bridge.callbacks.onAudioOut(pcm16k);
@@ -639,6 +752,11 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
     if (type === 'response.done') {
       bridge.speaking = false;
       bridge.responseActive = false;
+      if (!bridge.greetingDone) {
+        bridge.greetingDone = true;
+        // Lo que entró mientras saludaba era ruido del arranque.
+        this.send(bridge.openaiWs, { type: 'input_audio_buffer.clear' });
+      }
       // Tools viven en response.done (mismo patrón que el sideband WebRTC).
       const calledTools = await this.handleFunctionCalls(deviceKey, bridge, event);
       if (calledTools) {
@@ -722,6 +840,7 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
       }
 
       let toolOutput: unknown;
+      const toolStartedAt = Date.now();
       try {
         toolOutput = await this.skillsRegistry.execute(functionCall.name, args, {
           channel: 'device',
@@ -735,6 +854,9 @@ export class RealtimeWsBridgeService implements OnModuleDestroy {
         };
       }
 
+      this.logger.log(
+        `[latencia] ${deviceKey} tool ${functionCall.name} tardó ${Date.now() - toolStartedAt} ms`,
+      );
       this.send(bridge.openaiWs, {
         type: 'conversation.item.create',
         item: {

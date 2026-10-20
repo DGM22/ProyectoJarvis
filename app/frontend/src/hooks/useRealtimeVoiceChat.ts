@@ -6,7 +6,7 @@ import type {
   VoiceCallMode,
   VoiceChatStatus,
 } from '../types/realtime';
-import { API_BASE_URL } from '@/lib/api/http';
+import { API_BASE_URL, apiFetch } from '@/lib/api/http';
 import { requestMicrophone } from '@/lib/microphone';
 
 const ACTIVE_STATUSES: VoiceChatStatus[] = [
@@ -488,7 +488,7 @@ export function useRealtimeVoiceChat(): UseRealtimeVoiceChatResult {
           query.set('consultId', options.consultId);
         }
 
-        const sdpResponse = await fetch(
+        const sdpResponse = await apiFetch(
           `${API_BASE_URL}/realtime/calls?${query.toString()}`,
           {
             method: 'POST',

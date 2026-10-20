@@ -1,0 +1,157 @@
+postgresql,jarvis,public,homes,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,homes,name,2,character varying,120,,,,
+postgresql,jarvis,public,homes,address,3,text,,,,,
+postgresql,jarvis,public,homes,timezone,4,character varying,64,,,,
+postgresql,jarvis,public,homes,door_open_alert_minutes,5,integer,,,,,
+postgresql,jarvis,public,homes,face_match_threshold,6,numeric,,,,,
+postgresql,jarvis,public,homes,created_at,7,timestamp with time zone,,,,,
+postgresql,jarvis,public,homes,updated_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,household_members,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,household_members,home_id,2,integer,,UNIQUE,,,
+postgresql,jarvis,public,household_members,home_id,2,integer,,FOREIGN KEY,public,homes,id
+postgresql,jarvis,public,household_members,name,3,character varying,120,UNIQUE,,,
+postgresql,jarvis,public,household_members,role,4,character varying,16,,,,
+postgresql,jarvis,public,household_members,notes,5,text,,,,,
+postgresql,jarvis,public,household_members,created_at,6,timestamp with time zone,,,,,
+postgresql,jarvis,public,household_members,updated_at,7,timestamp with time zone,,,,,
+postgresql,jarvis,public,face_photos,member_id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,face_photos,member_id,1,integer,,FOREIGN KEY,public,household_members,id
+postgresql,jarvis,public,face_photos,photo,2,bytea,,,,,
+postgresql,jarvis,public,face_photos,uploaded_at,3,timestamp with time zone,,,,,
+postgresql,jarvis,public,device_connections,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,device_connections,device_id,2,integer,,FOREIGN KEY,public,devices,id
+postgresql,jarvis,public,device_connections,channel,3,character varying,8,,,,
+postgresql,jarvis,public,device_connections,firmware_version,4,character varying,32,,,,
+postgresql,jarvis,public,device_connections,remote_ip,5,inet,,,,,
+postgresql,jarvis,public,device_connections,connected_at,6,timestamp with time zone,,,,,
+postgresql,jarvis,public,device_connections,disconnected_at,7,timestamp with time zone,,,,,
+postgresql,jarvis,public,users,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,users,member_id,2,integer,,UNIQUE,,,
+postgresql,jarvis,public,users,member_id,2,integer,,FOREIGN KEY,public,household_members,id
+postgresql,jarvis,public,users,email,3,character varying,160,UNIQUE,,,
+postgresql,jarvis,public,users,phone,4,character varying,32,,,,
+postgresql,jarvis,public,users,password_hash,5,character varying,255,,,,
+postgresql,jarvis,public,users,app_role,6,character varying,16,,,,
+postgresql,jarvis,public,users,is_active,7,boolean,,,,,
+postgresql,jarvis,public,users,last_login_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,users,created_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,users,updated_at,10,timestamp with time zone,,,,,
+postgresql,jarvis,public,devices,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,devices,home_id,2,integer,,FOREIGN KEY,public,homes,id
+postgresql,jarvis,public,devices,name,3,character varying,120,,,,
+postgresql,jarvis,public,devices,device_type,4,character varying,24,,,,
+postgresql,jarvis,public,devices,location,5,character varying,120,,,,
+postgresql,jarvis,public,devices,token_hash,6,character,64,UNIQUE,,,
+postgresql,jarvis,public,devices,token_prefix,7,character varying,8,,,,
+postgresql,jarvis,public,devices,token_rotated_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,devices,created_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,devices,updated_at,10,timestamp with time zone,,,,,
+postgresql,jarvis,public,device_components,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,device_components,device_id,2,integer,,UNIQUE,,,
+postgresql,jarvis,public,device_components,device_id,2,integer,,FOREIGN KEY,public,devices,id
+postgresql,jarvis,public,device_components,kind,3,character varying,24,FOREIGN KEY,public,component_kinds,code
+postgresql,jarvis,public,device_components,name,4,character varying,120,UNIQUE,,,
+postgresql,jarvis,public,device_components,model,5,character varying,60,,,,
+postgresql,jarvis,public,device_components,gpio_pin,6,smallint,,,,,
+postgresql,jarvis,public,device_components,is_enabled,7,boolean,,,,,
+postgresql,jarvis,public,device_components,created_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,component_kinds,code,1,character varying,24,PRIMARY KEY,,,
+postgresql,jarvis,public,component_kinds,category,2,character varying,10,,,,
+postgresql,jarvis,public,component_kinds,unit,3,character varying,16,,,,
+postgresql,jarvis,public,component_kinds,description,4,text,,,,,
+postgresql,jarvis,public,conversations,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,conversations,device_id,2,integer,,FOREIGN KEY,public,devices,id
+postgresql,jarvis,public,conversations,user_id,3,integer,,FOREIGN KEY,public,users,id
+postgresql,jarvis,public,conversations,reason,4,character varying,16,FOREIGN KEY,public,session_reasons,code
+postgresql,jarvis,public,conversations,end_reason,5,character varying,24,FOREIGN KEY,public,end_reasons,code
+postgresql,jarvis,public,conversations,summary,6,text,,,,,
+postgresql,jarvis,public,conversations,started_at,7,timestamp with time zone,,,,,
+postgresql,jarvis,public,conversations,ended_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,session_reasons,code,1,character varying,16,PRIMARY KEY,,,
+postgresql,jarvis,public,session_reasons,mode,2,character varying,12,,,,
+postgresql,jarvis,public,session_reasons,description,3,text,,,,,
+postgresql,jarvis,public,end_reasons,code,1,character varying,24,PRIMARY KEY,,,
+postgresql,jarvis,public,end_reasons,outcome,2,character varying,12,,,,
+postgresql,jarvis,public,end_reasons,description,3,text,,,,,
+postgresql,jarvis,public,messages,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,messages,conversation_id,2,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,messages,sender,3,character varying,12,,,,
+postgresql,jarvis,public,messages,content,4,text,,,,,
+postgresql,jarvis,public,messages,latency_ms,5,integer,,,,,
+postgresql,jarvis,public,messages,created_at,6,timestamp with time zone,,,,,
+postgresql,jarvis,public,tool_calls,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,tool_calls,conversation_id,2,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,tool_calls,tool_name,3,character varying,48,FOREIGN KEY,public,tools,name
+postgresql,jarvis,public,tool_calls,arguments,4,jsonb,,,,,
+postgresql,jarvis,public,tool_calls,result,5,jsonb,,,,,
+postgresql,jarvis,public,tool_calls,status,6,character varying,8,,,,
+postgresql,jarvis,public,tool_calls,error_message,7,text,,,,,
+postgresql,jarvis,public,tool_calls,latency_ms,8,integer,,,,,
+postgresql,jarvis,public,tool_calls,created_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,tools,name,1,character varying,48,PRIMARY KEY,,,
+postgresql,jarvis,public,tools,skill_name,2,character varying,32,,,,
+postgresql,jarvis,public,tools,description,3,text,,,,,
+postgresql,jarvis,public,face_verifications,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,face_verifications,conversation_id,2,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,face_verifications,camera_device_id,3,integer,,FOREIGN KEY,public,devices,id
+postgresql,jarvis,public,face_verifications,claimed_name,4,character varying,120,,,,
+postgresql,jarvis,public,face_verifications,status,5,character varying,20,,,,
+postgresql,jarvis,public,face_verifications,matched_member_id,6,integer,,FOREIGN KEY,public,household_members,id
+postgresql,jarvis,public,face_verifications,similarity,7,numeric,,,,,
+postgresql,jarvis,public,face_verifications,threshold,8,numeric,,,,,
+postgresql,jarvis,public,face_verifications,captured_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,face_verifications,created_at,10,timestamp with time zone,,,,,
+postgresql,jarvis,public,consults,id,1,uuid,,PRIMARY KEY,,,
+postgresql,jarvis,public,consults,doorbell_conversation_id,2,integer,,UNIQUE,,,
+postgresql,jarvis,public,consults,doorbell_conversation_id,2,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,consults,owner_conversation_id,3,integer,,UNIQUE,,,
+postgresql,jarvis,public,consults,owner_conversation_id,3,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,consults,visitor_summary,4,text,,,,,
+postgresql,jarvis,public,consults,status,5,character varying,16,,,,
+postgresql,jarvis,public,consults,answered_by,6,integer,,FOREIGN KEY,public,users,id
+postgresql,jarvis,public,consults,rang_at,7,timestamp with time zone,,,,,
+postgresql,jarvis,public,consults,answered_at,8,timestamp with time zone,,,,,
+postgresql,jarvis,public,consults,intercom_started_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,consults,intercom_ended_at,10,timestamp with time zone,,,,,
+postgresql,jarvis,public,consults,ended_at,11,timestamp with time zone,,,,,
+postgresql,jarvis,public,sensor_readings,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,sensor_readings,component_id,2,integer,,FOREIGN KEY,public,device_components,id
+postgresql,jarvis,public,sensor_readings,value,3,numeric,,,,,
+postgresql,jarvis,public,sensor_readings,recorded_at,4,timestamp with time zone,,,,,
+postgresql,jarvis,public,door_events,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,door_events,component_id,2,integer,,FOREIGN KEY,public,device_components,id
+postgresql,jarvis,public,door_events,state,3,character varying,8,,,,
+postgresql,jarvis,public,door_events,member_id,4,integer,,FOREIGN KEY,public,household_members,id
+postgresql,jarvis,public,door_events,consult_id,5,uuid,,FOREIGN KEY,public,consults,id
+postgresql,jarvis,public,door_events,occurred_at,6,timestamp with time zone,,,,,
+postgresql,jarvis,public,person_detections,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,person_detections,component_id,2,integer,,FOREIGN KEY,public,device_components,id
+postgresql,jarvis,public,person_detections,confidence,3,numeric,,,,,
+postgresql,jarvis,public,person_detections,consult_id,4,uuid,,FOREIGN KEY,public,consults,id
+postgresql,jarvis,public,person_detections,detected_at,5,timestamp with time zone,,,,,
+postgresql,jarvis,public,actuator_commands,id,1,bigint,,PRIMARY KEY,,,
+postgresql,jarvis,public,actuator_commands,component_id,2,integer,,FOREIGN KEY,public,device_components,id
+postgresql,jarvis,public,actuator_commands,command,3,character varying,16,,,,
+postgresql,jarvis,public,actuator_commands,source,4,character varying,12,,,,
+postgresql,jarvis,public,actuator_commands,requested_by,5,integer,,FOREIGN KEY,public,users,id
+postgresql,jarvis,public,actuator_commands,conversation_id,6,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,actuator_commands,status,7,character varying,12,,,,
+postgresql,jarvis,public,actuator_commands,error_message,8,text,,,,,
+postgresql,jarvis,public,actuator_commands,created_at,9,timestamp with time zone,,,,,
+postgresql,jarvis,public,actuator_commands,completed_at,10,timestamp with time zone,,,,,
+postgresql,jarvis,public,flags,id,1,integer,,PRIMARY KEY,,,
+postgresql,jarvis,public,flags,flag_type,2,character varying,24,,,,
+postgresql,jarvis,public,flags,severity,3,character varying,10,,,,
+postgresql,jarvis,public,flags,status,4,character varying,14,,,,
+postgresql,jarvis,public,flags,message,5,text,,,,,
+postgresql,jarvis,public,flags,conversation_id,6,integer,,FOREIGN KEY,public,conversations,id
+postgresql,jarvis,public,flags,consult_id,7,uuid,,FOREIGN KEY,public,consults,id
+postgresql,jarvis,public,flags,face_verification_id,8,bigint,,FOREIGN KEY,public,face_verifications,id
+postgresql,jarvis,public,flags,door_event_id,9,bigint,,FOREIGN KEY,public,door_events,id
+postgresql,jarvis,public,flags,person_detection_id,10,bigint,,FOREIGN KEY,public,person_detections,id
+postgresql,jarvis,public,flags,actuator_command_id,11,bigint,,FOREIGN KEY,public,actuator_commands,id
+postgresql,jarvis,public,flags,device_connection_id,12,bigint,,FOREIGN KEY,public,device_connections,id
+postgresql,jarvis,public,flags,acknowledged_by,13,integer,,FOREIGN KEY,public,users,id
+postgresql,jarvis,public,flags,created_at,14,timestamp with time zone,,,,,
+postgresql,jarvis,public,flags,acknowledged_at,15,timestamp with time zone,,,,,
+postgresql,jarvis,public,flags,resolved_at,16,timestamp with time zone,,,,,

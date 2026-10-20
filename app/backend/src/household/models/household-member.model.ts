@@ -9,15 +9,16 @@ import {
   UpdatedAt,
 } from 'sequelize-typescript';
 
-export const HOUSEHOLD_ROLES = ['owner', 'resident'] as const;
+export const HOUSEHOLD_ROLES = ['owner', 'resident', 'guest'] as const;
 export type HouseholdRole = (typeof HOUSEHOLD_ROLES)[number];
 
 /**
- * Persona que vive en la casa. El timbre usa el roster para saber si un
- * visitante busca a alguien real; la presencia se confirma llamando al dueño.
+ * Persona de la casa (tabla `people`, antes `household_members`). El timbre usa
+ * el roster para saber si un visitante busca a alguien real; las personas con
+ * cuenta (`users`) pueden entrar a la app.
  */
 @Table({
-  tableName: 'household_members',
+  tableName: 'people',
   underscored: true,
 })
 export class HouseholdMember extends Model {
@@ -38,6 +39,10 @@ export class HouseholdMember extends Model {
 
   @Column({ type: DataType.TEXT, allowNull: true })
   declare notes: string | null;
+
+  /** Inactivo = ya no vive/visita la casa, pero se conserva su historial. */
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
+  declare active: boolean;
 
   /** Foto de referencia para la verificación facial del timbre. */
   @Column({ type: DataType.BLOB, allowNull: true })

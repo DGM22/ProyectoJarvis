@@ -1,6 +1,6 @@
-import { API_BASE_URL, jsonRequest, parseJson } from './http';
+import { API_BASE_URL, jsonRequest, parseJson, apiFetch } from './http';
 
-export type HouseholdRole = 'owner' | 'resident';
+export type HouseholdRole = 'owner' | 'resident' | 'guest';
 
 export type HouseholdMemberDto = {
   id: number;
@@ -21,14 +21,14 @@ export type HouseholdMemberInput = {
 };
 
 export async function listHousehold(): Promise<HouseholdMemberDto[]> {
-  return parseJson(await fetch(`${API_BASE_URL}/household`));
+  return parseJson(await apiFetch(`${API_BASE_URL}/household`));
 }
 
 export async function createHouseholdMember(
   input: HouseholdMemberInput,
 ): Promise<HouseholdMemberDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/household`, jsonRequest('POST', input)),
+    await apiFetch(`${API_BASE_URL}/household`, jsonRequest('POST', input)),
   );
 }
 
@@ -37,13 +37,13 @@ export async function updateHouseholdMember(
   input: Partial<HouseholdMemberInput>,
 ): Promise<HouseholdMemberDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/household/${id}`, jsonRequest('PATCH', input)),
+    await apiFetch(`${API_BASE_URL}/household/${id}`, jsonRequest('PATCH', input)),
   );
 }
 
 export async function deleteHouseholdMember(id: number): Promise<void> {
   await parseJson(
-    await fetch(`${API_BASE_URL}/household/${id}`, { method: 'DELETE' }),
+    await apiFetch(`${API_BASE_URL}/household/${id}`, { method: 'DELETE' }),
   );
 }
 
@@ -53,7 +53,7 @@ export async function uploadFacePhoto(
   file: File,
 ): Promise<HouseholdMemberDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/household/${id}/face-photo`, {
+    await apiFetch(`${API_BASE_URL}/household/${id}/face-photo`, {
       method: 'PUT',
       headers: { 'Content-Type': file.type },
       body: file,
@@ -63,7 +63,7 @@ export async function uploadFacePhoto(
 
 export async function deleteFacePhoto(id: number): Promise<HouseholdMemberDto> {
   return parseJson(
-    await fetch(`${API_BASE_URL}/household/${id}/face-photo`, {
+    await apiFetch(`${API_BASE_URL}/household/${id}/face-photo`, {
       method: 'DELETE',
     }),
   );

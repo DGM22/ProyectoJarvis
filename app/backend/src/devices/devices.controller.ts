@@ -129,7 +129,7 @@ export class DevicesController {
         // ignore
       }
     }
-    await this.devicesService.delete(id);
-    return { ok: true };
+    const { archived } = await this.devicesService.delete(id);
+    return { ok: true, archived };
   }
 }

@@ -10,6 +10,8 @@ import WebSocket from 'ws';
 import {
   ACTIVE_CONSULT_STATUSES,
   type ConsultClientMessage,
+  type ConsultEvent,
+  type ConsultListener,
   type ConsultServerMessage,
   type ConsultSnapshot,
   type ConsultStatus,
@@ -19,6 +21,7 @@ import {
   type OwnerIntercomLink,
   type OwnerSessionController,
 } from './consult.types';
+import { isLikelyHallucination } from './transcript-filter';
 
 /** Tiempo que suena la web antes de que el timbre tome recado solo. */
 const RING_TIMEOUT_MS = 45_000;
@@ -32,6 +35,9 @@ const DECLINED_INSTRUCTION =
   'El dueño no puede atender ahora. Dile al visitante con amabilidad que en este momento no es posible y ofrece tomar un recado. No digas que el dueño rechazó la llamada ni si hay alguien en casa.';
 const OWNER_LEFT_INSTRUCTION =
   'El dueño colgó sin dejar instrucción. Dile al visitante que por ahora no es posible atenderlo y ofrece tomar un recado.';
+/** Antepuesto cuando la IA reanuda sin haber saludado (modo Ring). */
+const RING_FIRST_GREETING =
+  'Todavía no has hablado con el visitante: empieza con un saludo breve y cordial. Después:';
 const CLOSED_INSTRUCTION =
   'La consulta con el dueño terminó. Si el visitante sigue ahí, despídete con amabilidad u ofrece tomar un recado.';
 /** Lo único que dice la IA del timbre antes de ceder la bocina al dueño. */
@@ -62,8 +68,18 @@ interface ConsultState {
   endedAt: Date | null;
   ringExpiresAt: Date | null;
   ringTimer: NodeJS.Timeout | null;
+  /** Suena antes de que la IA hable: falta el saludo al reanudar. */
+  greetPending: boolean;
   intercom: IntercomState;
   intercomLink: OwnerIntercomLink | null;
+}
+
+/** Opciones del timbrazo (modo Ring: suena primero, la IA después). */
+export interface CallOwnerOptions {
+  /** Cuánto suena antes de tomar recado (por defecto `RING_TIMEOUT_MS`). */
+  ringMs?: number;
+  /** La IA todavía no ha saludado: al reanudar debe empezar saludando. */
+  ringFirst?: boolean;
 }
 
 export interface CallOwnerResult {
@@ -92,6 +108,26 @@ export class ConsultService implements OnModuleDestroy {
   private readonly consults = new Map<string, ConsultState>();
   private readonly ownerSessions = new Map<string, OwnerSessionController>();
   private readonly viewers = new Set<WebSocket>();
+  private readonly listeners = new Set<ConsultListener>();
+  /** Persona de la web que mandó cada socket `/consult` (quién contestó). */
+  private readonly viewerPeople = new Map<WebSocket, number>();
+
+  /** Suscribe a los eventos de las consultas (p. ej. el historial de visitas). */
+  addListener(listener: ConsultListener): void {
+    this.listeners.add(listener);
+  }
+
+  private emit(event: ConsultEvent): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.warn(
+          `Consult listener failed on ${event.type}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Timbre (puente ESP32)
@@ -136,8 +172,14 @@ export class ConsultService implements OnModuleDestroy {
     if (!doorbell || !trimmed) {
       return;
     }
+    // El mic de la puerta trae ruido y Whisper lo "transcribe" como "Un
+    // saludo", "Muchas gracias"…: no se anota ni se le cuenta al dueño.
+    if (role === 'visitor' && isLikelyHallucination(trimmed)) {
+      return;
+    }
 
     doorbell.transcript.push({ role, text: trimmed, at: new Date().toISOString() });
+    this.emit({ type: 'transcript', sessionKey, role, text: trimmed });
     if (doorbell.transcript.length > MAX_TRANSCRIPT_LINES) {
       doorbell.transcript.splice(0, doorbell.transcript.length - MAX_TRANSCRIPT_LINES);
     }
@@ -154,7 +196,11 @@ export class ConsultService implements OnModuleDestroy {
    * El agente del timbre pide al dueño una decisión: pausa al visitante y
    * anilla la web, o reenvía el dato nuevo si el dueño ya está en llamada.
    */
-  callOwner(sessionKey: string, summary: string): CallOwnerResult {
+  callOwner(
+    sessionKey: string,
+    summary: string,
+    options: CallOwnerOptions = {},
+  ): CallOwnerResult {
     const doorbell = this.doorbells.get(sessionKey);
     if (!doorbell) {
       throw new BadRequestException('call_owner is only available from the doorbell');
@@ -192,6 +238,7 @@ export class ConsultService implements OnModuleDestroy {
     this.pruneEnded();
 
     const now = new Date();
+    const ringMs = options.ringMs ?? RING_TIMEOUT_MS;
     const consult: ConsultState = {
       id: randomUUID(),
       sessionKey,
@@ -202,17 +249,19 @@ export class ConsultService implements OnModuleDestroy {
       createdAt: now,
       answeredAt: null,
       endedAt: null,
-      ringExpiresAt: new Date(now.getTime() + RING_TIMEOUT_MS),
+      ringExpiresAt: new Date(now.getTime() + ringMs),
       ringTimer: null,
+      greetPending: options.ringFirst ?? false,
       intercom: 'off',
       intercomLink: null,
     };
-    consult.ringTimer = setTimeout(() => this.handleNoAnswer(consult.id), RING_TIMEOUT_MS);
+    consult.ringTimer = setTimeout(() => this.handleNoAnswer(consult.id), ringMs);
     this.consults.set(consult.id, consult);
     doorbell.consultId = consult.id;
     doorbell.controller.pause();
 
     this.logger.log(`Consult ${consult.id} ringing (doorbell ${sessionKey})`);
+    this.emit({ type: 'ringing', consultId: consult.id, sessionKey, summary: trimmed });
     this.broadcastUpdate(consult);
 
     return {
@@ -227,12 +276,13 @@ export class ConsultService implements OnModuleDestroy {
   // Dueño (web)
   // ---------------------------------------------------------------------------
 
-  accept(consultId: string): ConsultSnapshot {
+  accept(consultId: string, personId: number | null = null): ConsultSnapshot {
     const consult = this.requireConsult(consultId);
     if (consult.status === 'ringing') {
       this.clearRingTimer(consult);
       consult.status = 'answered';
       consult.answeredAt = new Date();
+      this.emit({ type: 'answered', consultId, sessionKey: consult.sessionKey, personId });
       this.broadcastUpdate(consult);
     } else if (consult.status !== 'answered') {
       throw new BadRequestException(`Consult is ${consult.status}`);
@@ -240,11 +290,12 @@ export class ConsultService implements OnModuleDestroy {
     return this.toSnapshot(consult);
   }
 
-  decline(consultId: string): ConsultSnapshot {
+  decline(consultId: string, personId: number | null = null): ConsultSnapshot {
     const consult = this.requireConsult(consultId);
     if (!this.isActive(consult)) {
       return this.toSnapshot(consult);
     }
+    this.emit({ type: 'declined', consultId, sessionKey: consult.sessionKey, personId });
     this.resumeDoorbell(consult, DECLINED_INSTRUCTION);
     this.endConsult(consult, 'declined');
     return this.toSnapshot(consult);
@@ -358,6 +409,7 @@ export class ConsultService implements OnModuleDestroy {
         }
         consult.intercom = 'on';
         link.sendState('on');
+        this.emit({ type: 'intercom', consultId: consult.id, sessionKey: consult.sessionKey });
         this.logger.log(`Consult ${consult.id} intercom on`);
         this.broadcastUpdate(consult);
       },
@@ -491,6 +543,16 @@ export class ConsultService implements OnModuleDestroy {
   // Navegadores conectados a /consult
   // ---------------------------------------------------------------------------
 
+  /** Hay al menos una pestaña de la app abierta (alguien que pueda contestar). */
+  hasViewers(): boolean {
+    for (const client of this.viewers) {
+      if (client.readyState === WebSocket.OPEN) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   addViewer(client: WebSocket): void {
     this.viewers.add(client);
     this.sendTo(client, { type: 'consult.snapshot', consults: this.listActive() });
@@ -498,6 +560,12 @@ export class ConsultService implements OnModuleDestroy {
 
   removeViewer(client: WebSocket): void {
     this.viewers.delete(client);
+    this.viewerPeople.delete(client);
+  }
+
+  /** El gateway ya validó la sesión: recuerda quién está detrás del socket. */
+  setViewerPerson(client: WebSocket, personId: number): void {
+    this.viewerPeople.set(client, personId);
   }
 
   handleViewerMessage(client: WebSocket, raw: string): void {
@@ -506,12 +574,13 @@ export class ConsultService implements OnModuleDestroy {
       return;
     }
     try {
+      const personId = this.viewerPeople.get(client) ?? null;
       if (message.type === 'consult.accept') {
-        this.accept(message.consultId);
+        this.accept(message.consultId, personId);
       } else if (message.type === 'consult.intercom.start') {
         this.requestIntercom(message.consultId);
       } else if (message.type === 'consult.decline') {
-        this.decline(message.consultId);
+        this.decline(message.consultId, personId);
       } else {
         this.close(message.consultId);
       }
@@ -547,7 +616,13 @@ export class ConsultService implements OnModuleDestroy {
 
   private resumeDoorbell(consult: ConsultState, instruction: string): void {
     consult.awaitingOwner = false;
-    this.doorbells.get(consult.sessionKey)?.controller.resume(instruction);
+    let text = instruction;
+    if (consult.greetPending) {
+      // El timbre sonó primero: la IA aún no le ha dicho nada al visitante.
+      consult.greetPending = false;
+      text = `${RING_FIRST_GREETING} ${instruction}`;
+    }
+    this.doorbells.get(consult.sessionKey)?.controller.resume(text);
   }
 
   /** Corta el interfón; `reason` cierra también el socket del dueño. */
@@ -579,6 +654,9 @@ export class ConsultService implements OnModuleDestroy {
       doorbell.consultId = null;
     }
     this.logger.log(`Consult ${consult.id} ended: ${status}`);
+    if (status !== 'answered' && status !== 'ringing') {
+      this.emit({ type: 'ended', consultId: consult.id, sessionKey: consult.sessionKey, status });
+    }
     this.broadcastUpdate(consult);
   }
 

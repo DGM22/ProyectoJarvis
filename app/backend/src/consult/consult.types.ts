@@ -81,6 +81,30 @@ export interface OwnerSessionController {
   notify(text: string): void;
 }
 
+/**
+ * Lo que pasa en una consulta, para quien lo quiera persistir (historial de
+ * visitas). `personId` es quien actuó desde la web, si se sabe.
+ */
+export type ConsultEvent =
+  | { type: 'ringing'; consultId: string; sessionKey: string; summary: string }
+  | { type: 'answered'; consultId: string; sessionKey: string; personId: number | null }
+  | { type: 'declined'; consultId: string; sessionKey: string; personId: number | null }
+  | {
+      type: 'ended';
+      consultId: string;
+      sessionKey: string;
+      status: 'missed' | 'closed' | 'visitor_left' | 'declined';
+    }
+  | { type: 'intercom'; consultId: string; sessionKey: string }
+  | {
+      type: 'transcript';
+      sessionKey: string;
+      role: 'visitor' | 'doorbell';
+      text: string;
+    };
+
+export type ConsultListener = (event: ConsultEvent) => void;
+
 export type ConsultClientMessage =
   | { type: 'consult.accept'; consultId: string }
   | { type: 'consult.decline'; consultId: string }

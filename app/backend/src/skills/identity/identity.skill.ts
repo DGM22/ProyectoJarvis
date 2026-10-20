@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { InteractionsService } from '../../home/interactions.service';
 import {
   FaceVerificationService,
   type OwnerVerificationResult,
@@ -35,7 +36,10 @@ const GUIDANCE: Record<OwnerVerificationResult['status'], string> = {
 export class IdentitySkill implements Skill {
   readonly name = 'identity';
 
-  constructor(private readonly faceVerification: FaceVerificationService) {}
+  constructor(
+    private readonly faceVerification: FaceVerificationService,
+    private readonly interactions: InteractionsService,
+  ) {}
 
   getTools(): RealtimeFunctionTool[] {
     return [
@@ -76,6 +80,14 @@ export class IdentitySkill implements Skill {
     }
 
     const result = await this.faceVerification.verifyOwner(context.sessionKey);
+    // Solo cuenta como intento de reconocimiento si hubo una cara que comparar.
+    if (result.status === 'match' || result.status === 'no_match' || result.status === 'no_face') {
+      await this.interactions.recordRecognition(context.sessionKey, {
+        recognized: result.status === 'match',
+        personId: result.ownerPersonId ?? null,
+        confidence: typeof result.similarity === 'number' ? result.similarity / 100 : null,
+      });
+    }
     return {
       ...result,
       claimedName:

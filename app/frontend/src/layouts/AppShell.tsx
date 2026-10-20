@@ -9,7 +9,8 @@ export function AppShell() {
       <MobileNav />
 
       <main className="md:pl-60">
-        <div className="mx-auto max-w-2xl px-5 py-8">
+        {/* En celular deja espacio para la barra inferior (4rem + zona segura). */}
+        <div className="mx-auto max-w-2xl px-5 py-8 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
           <Outlet />
         </div>
       </main>

@@ -50,6 +50,13 @@ export class Device extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   declare lastSeenAt: Date | null;
 
+  /** Última IP desde la que se conectó (diagnóstico). */
+  @Column({ type: DataType.STRING(45), allowNull: true })
+  declare ip: string | null;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
+  declare active: boolean;
+
   @CreatedAt
   @Column({ type: DataType.DATE, allowNull: false })
   declare createdAt: Date;

@@ -135,7 +135,8 @@ export class HouseholdService implements OnModuleInit {
     }
 
     const lines = members.map((member) => {
-      const role = member.role === 'owner' ? 'dueño' : 'residente';
+      const role =
+        member.role === 'owner' ? 'dueño' : member.role === 'guest' ? 'invitado' : 'residente';
       const notes = member.notes ? ` — ${member.notes}` : '';
       return `- ${member.name} (${role})${notes}`;
     });
