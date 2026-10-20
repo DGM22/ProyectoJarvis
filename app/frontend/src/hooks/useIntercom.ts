@@ -115,7 +115,26 @@ function peakOf(pcm: Int16Array): number {
  * compuerta de voz vive en el servidor: aquí se manda el mic completo (con
  * cancelación de eco del navegador) y se reproduce lo que llega de la puerta.
  */
-export function useIntercom(consultId: string | null, enabled: boolean) {
+export type IntercomTarget =
+  /** Interfón de una consulta del timbre (`/intercom`). */
+  | { kind: 'consult'; id: string }
+  /** Hablar con la puerta sin que toquen (`/live`). */
+  | { kind: 'live'; deviceId: number };
+
+function targetUrl(target: IntercomTarget): string {
+  const base = deriveWsUrl(API_BASE_URL);
+  return target.kind === 'consult'
+    ? `${base}/intercom?consultId=${encodeURIComponent(target.id)}`
+    : `${base}/live?deviceId=${target.deviceId}`;
+}
+
+export function useIntercom(target: IntercomTarget | null, enabled: boolean) {
+  // Clave estable: el efecto solo se reinicia si cambia a qué te conectas.
+  const targetKey = target
+    ? target.kind === 'consult'
+      ? `c:${target.id}`
+      : `l:${target.deviceId}`
+    : null;
   const [status, setStatus] = useState<IntercomStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [ownerTalking, setOwnerTalking] = useState(false);
@@ -136,7 +155,7 @@ export function useIntercom(consultId: string | null, enabled: boolean) {
   }, []);
 
   useEffect(() => {
-    if (!enabled || !consultId) {
+    if (!enabled || !target) {
       setStatus('idle');
       return undefined;
     }
@@ -191,7 +210,7 @@ export function useIntercom(consultId: string | null, enabled: boolean) {
           await context.resume();
         }
 
-        const url = `${deriveWsUrl(API_BASE_URL)}/intercom?consultId=${encodeURIComponent(consultId)}`;
+        const url = targetUrl(target);
         ws = new WebSocket(url);
         ws.binaryType = 'arraybuffer';
         wsRef.current = ws;
@@ -232,6 +251,8 @@ export function useIntercom(consultId: string | null, enabled: boolean) {
           if (disposed) return;
           if (event.code === 4403) {
             fail('La consulta ya no permite el interfón');
+          } else if (event.code === 4404 || event.code === 4409) {
+            fail(event.reason || 'No se pudo abrir la puerta');
           } else {
             setStatus('ended');
           }
@@ -258,7 +279,8 @@ export function useIntercom(consultId: string | null, enabled: boolean) {
       setMutedState(false);
       setPushToTalkState(false);
     };
-  }, [consultId, enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `target` va resumido en `targetKey`
+  }, [targetKey, enabled]);
 
   const setMuted = useCallback(
     (next: boolean) => {

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/lib/api/http';
+import { API_BASE_URL, apiFetch } from '@/lib/api/http';
 
 export type DeviceDto = {
   id: number;
@@ -34,12 +34,12 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function listDevices(): Promise<DeviceDto[]> {
-  const response = await fetch(`${API_BASE_URL}/devices`);
+  const response = await apiFetch(`${API_BASE_URL}/devices`);
   return parseJson(response);
 }
 
 export async function createDevice(name: string): Promise<DeviceCreatedDto> {
-  const response = await fetch(`${API_BASE_URL}/devices`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
@@ -50,7 +50,7 @@ export async function createDevice(name: string): Promise<DeviceCreatedDto> {
 export async function rotateDeviceToken(
   id: number,
 ): Promise<DeviceCreatedDto> {
-  const response = await fetch(`${API_BASE_URL}/devices/${id}/rotate-token`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${id}/rotate-token`, {
     method: 'POST',
   });
   return parseJson(response);
@@ -60,7 +60,7 @@ export async function callDevice(
   id: number,
   prompt?: string,
 ): Promise<{ ok: boolean; deviceId: number; message: string }> {
-  const response = await fetch(`${API_BASE_URL}/devices/${id}/call`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${id}/call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),
@@ -69,7 +69,7 @@ export async function callDevice(
 }
 
 export async function deleteDevice(id: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/devices/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/devices/${id}`, {
     method: 'DELETE',
   });
   await parseJson(response);

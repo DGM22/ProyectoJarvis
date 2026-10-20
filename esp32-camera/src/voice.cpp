@@ -39,6 +39,16 @@ static constexpr float MIC_HPF_ALPHA = 0.969f;
 static constexpr float MIC_UNHEALTHY_DBFS = -40.0f;
 /** Si el server no contesta session.ready en este tiempo, se cancela. */
 static constexpr uint32_t SESSION_REQUEST_TIMEOUT_MS = 12000;
+/**
+ * Sin voz de nadie (ni quien pregunta ni Jarvis) se cuelga. El botón vuelve
+ * a abrir la llamada; no se queda abierta hasta el siguiente timbre.
+ */
+static constexpr uint32_t CALL_SILENCE_HANGUP_MS = 10000;
+/**
+ * Pico PCM16 que cuenta como voz del visitante. En reposo el mic ronda
+ * 2000–5000; por debajo de esto el ruido no mantiene la llamada.
+ */
+static constexpr int32_t VISITOR_SPEECH_PEAK = 10000;
 
 /** 1 = imprime estadísticas de audio cada segundo durante la conversación. */
 #define VOICE_DEBUG 1
@@ -116,6 +126,10 @@ static volatile bool serverSpeaking = false;
 static volatile bool ampRunning = false;
 /** El server avisó `intercom.start`: modo de baja latencia. */
 static volatile bool intercomMode = false;
+/** Último momento con conversación (voz de Jarvis o del visitante). */
+static volatile uint32_t lastConversationMs = 0;
+/** Último frame del mic que superó el umbral de voz. */
+static volatile uint32_t lastVisitorSpeechMs = 0;
 
 static size_t prebufferBytes() { return intercomMode ? INTERCOM_PREBUFFER_BYTES : PLAY_PREBUFFER_BYTES; }
 static uint32_t prebufferMaxWaitMs() { return intercomMode ? INTERCOM_PREBUFFER_MAX_WAIT_MS : PREBUFFER_MAX_WAIT_MS; }
@@ -447,6 +461,10 @@ static void micTask(void *)
         if (peak > stats.micPeak) {
             stats.micPeak = peak;
         }
+        if (peak >= VISITOR_SPEECH_PEAK && state == VoiceState::Live && !ampRunning &&
+            !serverSpeaking) {
+            lastVisitorSpeechMs = millis();
+        }
         if (!ampRunning) {
             stats.micSumSq = stats.micSumSq + sumSq;
             stats.micN = stats.micN + n;
@@ -504,7 +522,40 @@ static void endSessionLocal(const char *why)
     serverSpeaking = false;
     intercomMode = false;
     flushPlayback = true;
+    lastConversationMs = 0;
+    lastVisitorSpeechMs = 0;
     xStreamBufferReset(micBuf);
+}
+
+static void noteConversation()
+{
+    lastConversationMs = millis();
+}
+
+/** Hay voz en curso: Jarvis habla, queda audio encolado, o el visitante habla. */
+static bool conversationBusy()
+{
+    if (serverSpeaking) {
+        return true;
+    }
+    if (playBuf != nullptr && xStreamBufferBytesAvailable(playBuf) > 0) {
+        return true;
+    }
+    const uint32_t now = millis();
+    if (lastPlayMs != 0 && now - lastPlayMs < 1000) {
+        return true;
+    }
+    if (lastVisitorSpeechMs != 0 && now - lastVisitorSpeechMs < 1000) {
+        return true;
+    }
+    return false;
+}
+
+static void hangUpForSilence()
+{
+    Serial.println("voz: 10 s sin preguntas, colgando");
+    voiceWs.sendTXT("{\"type\":\"session.end\",\"reason\":\"idle\"}");
+    endSessionLocal("silencio 30 s");
 }
 
 static void handleText(const char *json)
@@ -515,6 +566,7 @@ static void handleText(const char *json)
         setState(VoiceState::Live, "session.ready");
         serverSpeaking = false;
         firstAudioLogged = false;
+        noteConversation();
         Serial.printf("voz: >>> SESION LISTA en %lu ms, habla ahora <<<\n",
                       (unsigned long)(millis() - sessionRequestMs));
     } else if (isType(json, "display.set")) {
@@ -524,6 +576,9 @@ static void handleText(const char *json)
                                                 : "Jarvis ESCUCHANDO (mic abierto)");
         }
         serverSpeaking = speaking;
+        if (speaking) {
+            noteConversation();
+        }
     } else if (isType(json, "intercom.start")) {
         intercomMode = true;
         Serial.println("voz: >>> INTERFON: hablas directo con el dueno (baja latencia)");
@@ -579,6 +634,7 @@ static void onVoiceEvent(WStype_t type, uint8_t *payload, size_t length)
             firstAudioLogged = true;
             Serial.printf("voz: primer audio de Jarvis (%u bytes)\n", (unsigned)length);
         }
+        noteConversation();
         // PCM16 = 2 bytes por muestra. Un chunk impar recorrería todo lo que
         // sigue un byte y solo se oiría ruido: se descarta el byte suelto.
         if (length & 1) {
@@ -705,6 +761,14 @@ void voiceLoop()
     }
 
     if (!wsConnected || state != VoiceState::Live) {
+        return;
+    }
+
+    if (conversationBusy()) {
+        noteConversation();
+    } else if (lastConversationMs != 0 &&
+               millis() - lastConversationMs >= CALL_SILENCE_HANGUP_MS) {
+        hangUpForSilence();
         return;
     }
 

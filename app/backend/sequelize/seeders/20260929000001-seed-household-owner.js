@@ -11,7 +11,7 @@
 module.exports = {
   async up(queryInterface) {
     const [rows] = await queryInterface.sequelize.query(
-      'SELECT id FROM household_members LIMIT 1',
+      'SELECT id FROM people LIMIT 1',
     );
 
     if (Array.isArray(rows) && rows.length > 0) {
@@ -19,7 +19,7 @@ module.exports = {
     }
 
     const now = new Date();
-    await queryInterface.bulkInsert('household_members', [
+    await queryInterface.bulkInsert('people', [
       {
         name: 'Daniel Garza',
         role: 'owner',
@@ -31,7 +31,7 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    await queryInterface.bulkDelete('household_members', {
+    await queryInterface.bulkDelete('people', {
       name: 'Daniel Garza',
       role: 'owner',
     });

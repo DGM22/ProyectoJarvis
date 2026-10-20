@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '../auth/auth.decorators';
 import { InjectConnection } from '@nestjs/sequelize';
 import { Sequelize } from 'sequelize-typescript';
 
@@ -16,6 +17,7 @@ export class HealthController {
    * Reporta `degraded` en lugar de fallar, para que el chequeo distinga entre
    * "la app no responde" y "la app responde pero sin base de datos".
    */
+  @Public()
   @Get()
   async check() {
     let database: 'up' | 'down' = 'down';

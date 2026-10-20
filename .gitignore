@@ -58,3 +58,6 @@ esp32-camera/src/secrets.h
 esp32-camera/.pio/
 firmware/**/.pio/
 firmware/**/.vscode/
+
+# Respaldos locales de la BD (traen datos personales)
+backups/

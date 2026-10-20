@@ -9,6 +9,11 @@ import { join } from 'path';
 export default () => ({
   backendPort: parseInt(process.env.BACKEND_PORT ?? '3000', 10),
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
+  auth: {
+    /** Firma las cookies de sesión. Sin él, las sesiones mueren al reiniciar. */
+    secret: process.env.AUTH_SECRET ?? '',
+    sessionDays: parseInt(process.env.AUTH_SESSION_DAYS ?? '30', 10),
+  },
   app: {
     timezone: process.env.APP_TIMEZONE ?? 'America/Mexico_City',
   },

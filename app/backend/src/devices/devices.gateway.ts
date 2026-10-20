@@ -17,6 +17,10 @@ import {
 } from './device-protocol';
 import { DevicesRegistryService } from './devices-registry.service';
 import { DevicesService } from './devices.service';
+import { InteractionsService } from '../home/interactions.service';
+import { LiveSessionService } from './live-session.service';
+import { AttentionService } from '../home/attention.service';
+import { ConsultService } from '../consult/consult.service';
 
 let connectionCounter = 0;
 
@@ -38,6 +42,10 @@ export class DevicesGateway
     private readonly devicesService: DevicesService,
     private readonly registry: DevicesRegistryService,
     private readonly realtimeBridge: RealtimeWsBridgeService,
+    private readonly interactions: InteractionsService,
+    private readonly live: LiveSessionService,
+    private readonly attention: AttentionService,
+    private readonly consultService: ConsultService,
   ) {}
 
   /**
@@ -81,6 +89,9 @@ export class DevicesGateway
     const bridgeKey = this.bridgeKeys.get(client);
     const deviceId = this.deviceIds.get(client);
 
+    if (deviceId !== undefined) {
+      this.live.endByDevice(deviceId, 'La puerta se desconectó');
+    }
     if (bridgeKey && this.realtimeBridge.isInCall(bridgeKey)) {
       this.realtimeBridge.end(bridgeKey, 'device_disconnect');
     }
@@ -141,6 +152,11 @@ export class DevicesGateway
       const pcm = Buffer.isBuffer(data)
         ? data
         : Buffer.from(data as ArrayBuffer);
+      // En vista en vivo el micrófono de la puerta va al dueño, no a OpenAI.
+      if (this.live.isLive(deviceId)) {
+        this.live.deviceAudio(deviceId, pcm);
+        return;
+      }
       this.realtimeBridge.appendInputAudio(bridgeKey, pcm);
       return;
     }
@@ -177,11 +193,21 @@ export class DevicesGateway
     }
 
     if (message.type === 'session.request') {
+      // Un visitante que toca tiene prioridad sobre la vista en vivo del dueño.
+      this.live.endByDevice(deviceId, 'Alguien tocó el timbre');
       await this.beginSession(client, message.reason, message.voice, undefined);
       return;
     }
 
     if (message.type === 'session.end') {
+      if (this.live.isLive(deviceId)) {
+        // El botón físico en vista en vivo = tocar el timbre, no colgar.
+        this.live.endByDevice(deviceId, 'Alguien tocó el timbre');
+        if (message.reason === 'button') {
+          await this.beginSession(client, 'button', undefined, undefined);
+        }
+        return;
+      }
       this.realtimeBridge.end(bridgeKey, message.reason ?? 'client_end');
       await this.devicesService.markStatus(deviceId, 'idle');
       return;
@@ -215,6 +241,18 @@ export class DevicesGateway
       return;
     }
 
+    // El modo de atención se decide al inicio y queda anotado en la visita.
+    const attention = await this.resolveAttention(reason);
+    const note = !attention
+      ? undefined
+      : !attention.ownerAvailable
+        ? 'no molestar'
+        : attention.ringFirst
+          ? 'sonó primero'
+          : undefined;
+    // Cada sesión del dispositivo queda en el historial de visitas.
+    await this.interactions.startVisit(bridgeKey, deviceId, reason, note);
+
     try {
       await this.realtimeBridge.start(
         bridgeKey,
@@ -233,8 +271,10 @@ export class DevicesGateway
           onSessionEnd: (endReason) => {
             this.send(client, { type: 'session.end', reason: endReason });
             void this.devicesService.markStatus(deviceId, 'idle');
+            void this.interactions.endVisit(bridgeKey);
           },
           onError: (message) => {
+            void this.interactions.recordError(deviceId, bridgeKey, 'realtime', message);
             this.send(client, { type: 'error', message });
             this.send(client, { type: 'display.set', state: 'error' });
           },
@@ -246,15 +286,35 @@ export class DevicesGateway
           reason,
           voice,
           inboundPrompt,
+          attention,
         },
       );
       await this.devicesService.markStatus(deviceId, 'in_call');
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to start session';
+      await this.interactions.recordError(deviceId, bridgeKey, 'session_start', message);
+      await this.interactions.endVisit(bridgeKey);
       this.send(client, { type: 'error', message });
       this.send(client, { type: 'display.set', state: 'error' });
     }
+  }
+
+  /**
+   * Modo de atención solo para el timbre físico. Si el modo es "suena primero"
+   * pero no hay ninguna pestaña de la app abierta, no tiene sentido esperar:
+   * atiende la IA de inmediato.
+   */
+  private async resolveAttention(reason: DeviceSessionReason) {
+    if (reason !== 'button') {
+      return undefined;
+    }
+    const settings = await this.attention.get();
+    return {
+      ringFirst: settings.mode === 'ring_first' && this.consultService.hasViewers(),
+      ringMs: settings.ringSeconds * 1000,
+      ownerAvailable: settings.mode !== 'ai_only',
+    };
   }
 
   private extractToken(req: IncomingMessage): string | null {

@@ -29,12 +29,9 @@ export type RealtimeSessionConfig = {
   audio: {
     input: {
       format?: { type: 'audio/pcm'; rate: number };
-      transcription: { model: string };
-      turn_detection: {
-        type: 'server_vad';
-        create_response: boolean;
-        interrupt_response: boolean;
-      };
+      transcription: { model: string; language?: string };
+      noise_reduction?: { type: 'near_field' | 'far_field' };
+      turn_detection: TurnDetection;
     };
     output: {
       format?: { type: 'audio/pcm'; rate: number };
@@ -42,6 +39,34 @@ export type RealtimeSessionConfig = {
     };
   };
 };
+
+export type TurnDetection = {
+  type: 'server_vad';
+  threshold?: number;
+  prefix_padding_ms?: number;
+  silence_duration_ms?: number;
+  create_response: boolean;
+  interrupt_response: boolean;
+};
+
+/**
+ * Detección de turno para el mic de la ESP32 (lejano, sin cancelación de eco
+ * y con ruido). Medido: con los valores por defecto el ruido de la puerta se
+ * tomaba como voz y cancelaba el saludo (~4 s perdidos).
+ */
+export function deviceTurnDetection(): TurnDetection {
+  return {
+    type: 'server_vad',
+    // Más alto que el 0.5 por defecto: ruido de calle/cables no abre turno.
+    threshold: 0.65,
+    prefix_padding_ms: 300,
+    silence_duration_ms: 450,
+    create_response: true,
+    // La puerta es half-duplex: lo que suena en su bocina regresa al mic y
+    // cortaría a la IA a media frase.
+    interrupt_response: false,
+  };
+}
 
 export type SessionConfigOptions = {
   /** Texto extra inyectado en las instrucciones (alertas, inbound call, etc.). */
@@ -54,7 +79,19 @@ export type SessionConfigOptions = {
   mode?: SessionMode;
   /** Requerido en modo `security`: consulta del timbre que atiende el dueño. */
   consultId?: string;
+  /**
+   * `false` = modo "no molestar": el timbre atiende solo y toma recado, sin
+   * `call_owner`. Por defecto el dueño sí está disponible.
+   */
+  ownerAvailable?: boolean;
 };
+
+/** Instrucciones del timbre cuando el dueño no quiere que lo llamen. */
+export const DOORBELL_DO_NOT_DISTURB_INSTRUCTIONS =
+  'El dueño activó "no molestar": NO puedes llamarlo ni pasarle al visitante. Atiende tú solo: ' +
+  'pregunta a quién busca y a qué viene, resuelve lo que puedas y, si hace falta algo del dueño, ' +
+  'toma un recado completo (nombre, motivo y contacto) y guárdalo con kb_save_fact. ' +
+  'No digas que el dueño no está en casa ni si hay alguien: solo que por ahora no puede atender.';
 
 /**
  * Construye la configuración de sesión Realtime compartida por WebRTC y por el
@@ -136,6 +173,7 @@ export class RealtimeSessionConfigService {
         DOORBELL_OPERATIONAL_RULES,
         ...common,
         'When the visitor sends a text message during the call, treat it as first-class input.',
+        options.ownerAvailable === false ? DOORBELL_DO_NOT_DISTURB_INSTRUCTIONS : undefined,
         options.extraInstructions,
         kbCoreContext,
       ];
@@ -177,7 +215,9 @@ export class RealtimeSessionConfigService {
       type: 'realtime',
       model,
       instructions: instructions.filter(Boolean).join('\n'),
-      tools: this.skillsRegistry.getToolsForMode(mode),
+      tools: this.skillsRegistry
+        .getToolsForMode(mode)
+        .filter((tool) => options.ownerAvailable !== false || tool.name !== 'call_owner'),
       tool_choice: 'auto',
       output_modalities: ['audio'],
       audio: {
@@ -194,15 +234,22 @@ export class RealtimeSessionConfigService {
     audioInput: RealtimeSessionConfig['audio']['input'];
     audioOutput: RealtimeSessionConfig['audio']['output'];
   } {
+    // `pcmRateHz` solo lo pide el puente de la ESP32; el navegador va por WebRTC.
+    const isDevice = pcmRateHz !== undefined;
     const audioInput: RealtimeSessionConfig['audio']['input'] = {
+      // Sin idioma fijo, el ruido se transcribía como hindi o "3.1, 3.1…".
       transcription: {
         model: 'whisper-1',
+        language: 'es',
       },
-      turn_detection: {
-        type: 'server_vad',
-        create_response: true,
-        interrupt_response: true,
-      },
+      noise_reduction: { type: isDevice ? 'far_field' : 'near_field' },
+      turn_detection: isDevice
+        ? deviceTurnDetection()
+        : {
+            type: 'server_vad',
+            create_response: true,
+            interrupt_response: true,
+          },
     };
 
     const audioOutput: RealtimeSessionConfig['audio']['output'] = {

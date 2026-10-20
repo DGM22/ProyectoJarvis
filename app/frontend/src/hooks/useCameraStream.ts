@@ -13,6 +13,7 @@ export function useCameraStream(enabled: boolean) {
   const [status, setStatus] = useState<CameraStreamStatus>('idle');
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [cameraName, setCameraName] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<number | null>(null);
   const frameUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -56,9 +57,11 @@ export function useCameraStream(enabled: boolean) {
         const parsed = JSON.parse(event.data) as {
           type?: string;
           name?: string;
+          deviceId?: number;
         };
         if (parsed.type === 'camera.online') {
           setCameraName(parsed.name ?? 'Cámara');
+          if (typeof parsed.deviceId === 'number') setDeviceId(parsed.deviceId);
           setStatus('online');
         } else if (parsed.type === 'camera.offline') {
           setStatus('offline');
@@ -93,7 +96,7 @@ export function useCameraStream(enabled: boolean) {
     };
   }, [enabled]);
 
-  return { status, frameUrl, cameraName };
+  return { status, frameUrl, cameraName, deviceId };
 }
 
 export type CameraStream = ReturnType<typeof useCameraStream>;

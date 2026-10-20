@@ -4,7 +4,9 @@ import {
   OnGatewayDisconnect,
   WebSocketGateway,
 } from '@nestjs/websockets';
+import type { IncomingMessage } from 'http';
 import type WebSocket from 'ws';
+import { AuthService } from '../auth/auth.service';
 import { CameraHubService } from './camera-hub.service';
 
 /**
@@ -16,9 +18,17 @@ export class CameraViewGateway
 {
   private readonly logger = new Logger(CameraViewGateway.name);
 
-  constructor(private readonly cameraHub: CameraHubService) {}
+  constructor(
+    private readonly cameraHub: CameraHubService,
+    private readonly authService: AuthService,
+  ) {}
 
-  handleConnection(client: WebSocket): void {
+  async handleConnection(client: WebSocket, req: IncomingMessage): Promise<void> {
+    // La cámara de la puerta solo la ve alguien con sesión.
+    if (!(await this.authService.userFromRequest(req))) {
+      client.close(4401, 'Unauthorized');
+      return;
+    }
     this.logger.log('Camera viewer connected');
     this.cameraHub.addViewer(client);
   }

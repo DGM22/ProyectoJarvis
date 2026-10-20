@@ -37,7 +37,17 @@ services:
       target: build
     container_name: jarvis-backend-migrate
     working_dir: /repo/app/backend
-    command: ['pnpm', 'sequelize:migrate']
+    # Migraciones + seeds seguros en cada arranque (dueño por defecto y usuario
+    # de prueba del .env). No corre el seed de la base de conocimiento: ese
+    # llama a OpenAI para generar embeddings.
+    command:
+      - sh
+      - -c
+      - >-
+        pnpm sequelize:migrate &&
+        pnpm exec sequelize-cli db:seed
+        --seed 20260929000001-seed-household-owner.js
+        --seed 20261019000001-seed-test-user.js
     env_file: .env
     environment:
       NODE_ENV: production

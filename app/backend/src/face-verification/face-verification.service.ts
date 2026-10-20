@@ -17,6 +17,8 @@ export interface OwnerVerificationResult {
   status: OwnerVerificationStatus;
   /** Dueño con el que coincidió (solo en `match`). */
   ownerName?: string;
+  /** Persona (`people.id`) con la que coincidió (solo en `match`). */
+  ownerPersonId?: number;
   /** Mejor similitud obtenida, redondeada a un decimal. */
   similarity?: number;
   threshold: number;
@@ -76,7 +78,7 @@ export class FaceVerificationService {
       capturedAt: new Date(frame.at).toISOString(),
     };
 
-    let best: { name: string; similarity: number } | null = null;
+    let best: { name: string; personId: number; similarity: number } | null = null;
     try {
       for (const reference of references) {
         const comparison = await this.comparer.compare(
@@ -88,7 +90,11 @@ export class FaceVerificationService {
           comparison.similarity !== null &&
           (!best || comparison.similarity > best.similarity)
         ) {
-          best = { name: reference.name, similarity: comparison.similarity };
+          best = {
+            name: reference.name,
+            personId: reference.memberId,
+            similarity: comparison.similarity,
+          };
         }
       }
     } catch (error) {
@@ -108,6 +114,7 @@ export class FaceVerificationService {
       return {
         status: 'match',
         ownerName: best.name,
+        ownerPersonId: best.personId,
         similarity,
         threshold,
         ...captured,

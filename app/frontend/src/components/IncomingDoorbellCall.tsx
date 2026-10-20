@@ -6,6 +6,7 @@ import { CameraLiveView } from '@/components/CameraLiveView';
 import { JarvisGraphOrb, type OrbState } from '@/components/JarvisGraphOrb';
 import { useCameraStream, type CameraStream } from '@/hooks/useCameraStream';
 import { useConsult } from '@/hooks/useConsult';
+import { IntercomStage, RoundButton } from '@/components/IntercomUi';
 import { useIntercom, type IntercomControls } from '@/hooks/useIntercom';
 import { useRingtone } from '@/hooks/useRingtone';
 import { useDoorbellSlot, useIsDesktop } from '@/providers/DoorbellSlotProvider';
@@ -195,74 +196,30 @@ function RingingModal({
   );
 }
 
-function LevelBar({ label, level, active }: { label: string; level: number; active: boolean }) {
-  return (
-    <div className="flex w-full items-center gap-2">
-      <span className={`w-16 text-left text-xs ${active ? 'text-accent-400' : 'text-text-low'}`}>
-        {label}
-      </span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-overlay">
-        <div
-          className={`h-full rounded-full transition-[width] duration-100 ${active ? 'bg-accent-400' : 'bg-text-low'}`}
-          style={{ width: `${Math.min(100, Math.round(Math.sqrt(level) * 100))}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Botón redondo de la barra inferior (tamaño de pulgar). */
-function RoundButton({
-  label,
-  onClick,
-  tone = 'neutral',
-  active = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  tone?: 'neutral' | 'danger';
-  active?: boolean;
-  children: ReactNode;
-}) {
-  const color =
-    tone === 'danger'
-      ? 'h-16 w-16 border-danger/70 bg-danger text-white hover:bg-danger/90'
-      : active
-        ? 'h-14 w-14 border-accent-400 bg-accent-wash text-accent-400'
-        : 'h-14 w-14 border-border bg-overlay text-text-hi hover:bg-raised';
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        aria-pressed={tone === 'neutral' ? active : undefined}
-        className={`flex items-center justify-center rounded-full border transition-colors ${color}`}
-      >
-        {children}
-      </button>
-      <span className="text-[11px] text-text-low">{label}</span>
-    </div>
-  );
-}
-
 /** Centro de la pantalla mientras hablas con Jarvis: orbe animado y qué pasa. */
 function JarvisStage({
   consult,
   status,
   muted,
   callActive,
+  latencyMs,
+  error,
   onCallJarvis,
 }: {
   consult: ConsultSnapshot;
   status: VoiceChatStatus;
   muted: boolean;
   callActive: boolean;
+  /** Fin de tu voz → Jarvis empieza a responder (medido en el navegador). */
+  latencyMs: number | null;
+  /** Error al conectar con Jarvis (red, micrófono…): se muestra con reintento. */
+  error: string | null;
   onCallJarvis: () => void;
 }) {
   const caption = !callActive
-    ? 'Jarvis no está en la llamada'
+    ? error
+      ? 'No se pudo conectar con Jarvis'
+      : 'Jarvis no está en la llamada'
     : muted
       ? 'Tu micrófono para Jarvis está silenciado'
       : status === 'speaking'
@@ -275,6 +232,12 @@ function JarvisStage({
     <>
       <JarvisGraphOrb state={callActive ? toOrbState(status, muted) : 'idle'} size={112} />
       <p className="text-sm font-medium text-text-hi">{caption}</p>
+      {callActive && latencyMs !== null && (
+        <p className="font-mono text-[11px] text-text-low">
+          Jarvis respondió en {(latencyMs / 1000).toFixed(1)} s
+        </p>
+      )}
+      {!callActive && error && <p className="max-w-xs text-xs text-danger-soft">{error}</p>}
       {!callActive && isConsultActive(consult) && (
         <button
           type="button"
@@ -282,45 +245,11 @@ function JarvisStage({
           className="flex items-center gap-2 rounded-xl border border-accent-400 bg-accent-wash px-4 py-2 text-sm font-medium text-accent-400"
         >
           <Bot size={16} />
-          Hablar con Jarvis
+          {error ? 'Reintentar con Jarvis' : 'Hablar con Jarvis'}
         </button>
       )}
       <p className="text-xs text-text-mid">{consult.visitorSummary}</p>
       <TranscriptTail consult={consult} lines={2} />
-    </>
-  );
-}
-
-/** Centro de la pantalla en interfón: quién tiene el turno y niveles de audio. */
-function IntercomStage({ intercom }: { intercom: IntercomControls }) {
-  const live = intercom.status === 'on';
-  const caption = !live
-    ? 'Jarvis le dice al visitante «te comunico»…'
-    : intercom.muted
-      ? 'Tu micrófono está silenciado'
-      : intercom.ownerTalking
-        ? 'El visitante te está escuchando'
-        : intercom.pushToTalk
-          ? 'Mantén presionado el botón para hablar'
-          : 'Habla cuando quieras; escuchando la puerta';
-
-  return (
-    <>
-      <span
-        className={`flex h-24 w-24 items-center justify-center rounded-full border-2 transition-colors ${
-          intercom.ownerTalking
-            ? 'border-accent-400 bg-accent-wash text-accent-400'
-            : 'border-border bg-overlay text-text-mid'
-        }`}
-      >
-        {intercom.muted ? <MicOff size={36} /> : <Mic size={36} />}
-      </span>
-      <p className="text-base font-semibold text-text-hi">{caption}</p>
-      <div className="w-full max-w-xs space-y-2">
-        <LevelBar label="Tú" level={intercom.micLevel} active={intercom.ownerTalking} />
-        <LevelBar label="Visitante" level={intercom.visitorLevel} active={!intercom.ownerTalking} />
-      </div>
-      {intercom.error && <p className="text-sm text-danger-soft">{intercom.error}</p>}
     </>
   );
 }
@@ -425,6 +354,8 @@ function DoorbellCallScreen({
               status={voice.status}
               muted={voice.muted}
               callActive={voice.isActive}
+              latencyMs={voice.latencyMs}
+              error={voice.error}
               onCallJarvis={() => voice.startSecurityCall(consult.id)}
             />
           )}
@@ -485,7 +416,7 @@ function DoorbellCallScreen({
 
 function EndedToast({ consult, onDismiss }: { consult: ConsultSnapshot; onDismiss: () => void }) {
   return (
-    <div className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 flex items-start gap-3 rounded-2xl border border-border bg-surface p-4 shadow-glow sm:inset-x-auto sm:right-4 sm:w-[360px]">
+    <div className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex items-start gap-3 rounded-2xl border border-border bg-surface p-4 shadow-glow sm:inset-x-auto sm:right-4 sm:w-[360px] md:bottom-4">
       <BellRing size={16} className="mt-0.5 shrink-0 text-text-low" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-text-hi">
@@ -538,8 +469,14 @@ export function IncomingDoorbellCall() {
     isActive && callMode !== 'security'
       ? (ordered.find((consult) => isConsultActive(consult) && consult.intercom !== 'off') ?? null)
       : null;
-  const panelConsult =
-    ownCall ?? assistantIntercom ?? (requestedHere ? (consults[requestedHere] ?? null) : null);
+  // Tras recargar la página la sesión de voz se pierde, pero la consulta sigue
+  // contestada en el servidor: se vuelve a mostrar para retomar la llamada.
+  const resumableConsult =
+    ordered.find((consult) => consult.status === 'answered' && !dismissed.has(consult.id)) ?? null;
+  const requestedConsult: ConsultSnapshot | null = requestedHere
+    ? (consults[requestedHere] ?? null)
+    : null;
+  const panelConsult = ownCall ?? assistantIntercom ?? requestedConsult ?? resumableConsult;
   // Solo la pestaña que lleva la llamada abre el interfón (no todas las abiertas).
   const intercomEnabled =
     panelConsult !== null && isConsultActive(panelConsult) && panelConsult.intercom !== 'off';
@@ -556,7 +493,10 @@ export function IncomingDoorbellCall() {
   // Un solo socket de video para toda la llamada: sonando → contestada → en
   // curso usan el mismo stream, sin reconectar ni parpadear.
   const camera = useCameraStream(ringing !== null || showOwnPanel);
-  const intercom = useIntercom(panelConsult?.id ?? null, intercomEnabled);
+  const intercom = useIntercom(
+    panelConsult ? { kind: 'consult', id: panelConsult.id } : null,
+    intercomEnabled,
+  );
 
   // Mientras hablas directo, Jarvis queda en espera (ni te oye ni se oye).
   useEffect(() => {

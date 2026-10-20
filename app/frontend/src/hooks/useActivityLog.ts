@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { API_BASE_URL } from '@/lib/api/http';
+import { API_BASE_URL, apiFetch } from '@/lib/api/http';
 
 export interface ActivityEntry {
   id: number;
@@ -19,7 +19,7 @@ export function useActivityLog(pollIntervalMs = 5000) {
 
   const fetchEntries = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/activity-log?limit=50`);
+      const res = await apiFetch(`${API_BASE_URL}/activity-log?limit=50`);
       if (!res.ok) return;
       const data = (await res.json()) as ActivityEntry[];
       setEntries(data);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { ConsultModule } from '../consult/consult.module';
+import { HomeModule } from '../home/home.module';
 import { FaceVerificationModule } from '../face-verification/face-verification.module';
 import { HouseholdModule } from '../household/household.module';
 import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
@@ -24,6 +25,7 @@ import { SkillsRegistryService } from './skills-registry.service';
     HouseholdModule,
     ConsultModule,
     FaceVerificationModule,
+    HomeModule,
   ],
   providers: [
     KnowledgeBaseSkill,

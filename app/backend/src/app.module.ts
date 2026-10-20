@@ -2,7 +2,9 @@ import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
+import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
+import { HomeModule } from './home/home.module';
 import { HealthModule } from './health/health.module';
 import { QueueModule } from './queue/queue.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -28,6 +30,8 @@ import { ConsultModule } from './consult/consult.module';
       load: [configuration],
     }),
     DatabaseModule,
+    AuthModule,
+    HomeModule,
     QueueModule,
     KnowledgeBaseModule,
     HouseholdModule,

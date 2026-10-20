@@ -155,6 +155,63 @@ describe('ConsultService', () => {
     expect(doorbell.resume).toHaveBeenCalledTimes(1);
   });
 
+  it('does not interrupt the owner with visitor transcripts while he decides', () => {
+    const { consultId } = service.callOwner('dev-1', 'Visita');
+    service.accept(consultId);
+    const owner = { notify: jest.fn() };
+    service.registerOwnerSession(consultId, owner);
+
+    service.appendTranscript('dev-1', 'visitor', 'Traigo dos cajas');
+
+    expect(owner.notify).not.toHaveBeenCalled();
+  });
+
+  it('drops Whisper hallucinations from the visitor transcript', () => {
+    const { consultId } = service.callOwner('dev-1', 'Visita');
+
+    service.appendTranscript('dev-1', 'visitor', 'Un saludo y hasta la próxima.');
+
+    expect(service.getSnapshot(consultId).transcript).toHaveLength(0);
+  });
+
+  describe('ring first (timbre tipo Ring)', () => {
+    it('rings for the configured time, then the AI greets before taking a message', () => {
+      const { consultId } = service.callOwner('dev-1', 'Alguien tocó el timbre', {
+        ringMs: 10_000,
+        ringFirst: true,
+      });
+
+      jest.advanceTimersByTime(9_999);
+      expect(service.getSnapshot(consultId).status).toBe('ringing');
+      expect(doorbell.resume).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1);
+      expect(service.getSnapshot(consultId).status).toBe('missed');
+      const instruction = doorbell.resume.mock.calls[0][0];
+      expect(instruction).toEqual(expect.stringContaining('saludo'));
+      expect(instruction).toEqual(expect.stringContaining('recado'));
+    });
+
+    it('greets only once, and only when the AI had not spoken yet', () => {
+      const first = service.callOwner('dev-1', 'Visita', { ringFirst: true });
+      service.accept(first.consultId);
+      service.instruct(first.consultId, 'Dile que ya voy');
+      expect(doorbell.resume.mock.calls[0][0]).toEqual(expect.stringContaining('saludo'));
+
+      // Una consulta normal (la IA ya habló antes) no antepone saludo.
+      const second = service.callOwner('dev-1', 'Otra visita');
+      service.accept(second.consultId);
+      service.instruct(second.consultId, 'Que lo deje en la puerta');
+      expect(doorbell.resume.mock.calls[1][0]).not.toEqual(expect.stringContaining('saludo'));
+    });
+
+    it('knows whether someone has the app open to answer', () => {
+      expect(service.hasViewers()).toBe(false);
+      service.addViewer(makeViewer().socket);
+      expect(service.hasViewers()).toBe(true);
+    });
+  });
+
   describe('intercom', () => {
     /** Consulta contestada con el interfón ya conectado y en vivo. */
     function liveIntercom() {
